@@ -4,16 +4,16 @@
    thread attempts to lower its priority, which should not take
    effect until the donation is released. */
 
-#include <stdio.h>
 #include "tests/threads/tests.h"
 #include "threads/init.h"
 #include "threads/synch.h"
 #include "threads/thread.h"
+#include <stdio.h>
 
 static thread_func acquire_thread_func;
 
 void
-test_priority_donate_lower (void) 
+test_priority_donate_lower (void)
 {
   struct lock lock;
 
@@ -40,7 +40,7 @@ test_priority_donate_lower (void)
 }
 
 static void
-acquire_thread_func (void *lock_) 
+acquire_thread_func (void *lock_)
 {
   struct lock *lock = lock_;
 

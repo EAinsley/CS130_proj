@@ -1,11 +1,11 @@
 /* Tries to open a file with the empty string as its name. */
 
-#include <syscall.h>
 #include "tests/lib.h"
 #include "tests/main.h"
+#include <syscall.h>
 
 void
-test_main (void) 
+test_main (void)
 {
   int handle = open ("");
   if (handle != -1)

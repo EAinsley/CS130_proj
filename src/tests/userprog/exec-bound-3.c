@@ -3,17 +3,17 @@
    but the remainder of the string is in invalid memory. Must
    kill process. */
 
-#include <syscall-nr.h>
-#include "tests/userprog/boundary.h"
 #include "tests/lib.h"
 #include "tests/main.h"
+#include "tests/userprog/boundary.h"
+#include <syscall-nr.h>
 
 void
-test_main (void) 
+test_main (void)
 {
   char *p = get_bad_boundary () - 1;
   *p = 'a';
-  exec(p);
+  exec (p);
 
   /* Note: if this test fails to pass even with the official solutions,
      it's probably because memory layout has changed and p no longer

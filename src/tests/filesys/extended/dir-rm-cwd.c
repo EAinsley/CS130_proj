@@ -2,12 +2,12 @@
    fail.  The requirements in each case are different; refer to
    the assignment for details. */
 
-#include <syscall.h>
 #include "tests/lib.h"
 #include "tests/main.h"
+#include <syscall.h>
 
 static int
-wrap_open (const char *name) 
+wrap_open (const char *name)
 {
   static int fds[8], fd_cnt;
   int fd, i;
@@ -21,7 +21,7 @@ wrap_open (const char *name)
 }
 
 void
-test_main (void) 
+test_main (void)
 {
   int root_fd, a_fd0;
   char name[READDIR_MAX_LEN + 1];

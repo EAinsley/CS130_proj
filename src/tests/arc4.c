@@ -1,5 +1,5 @@
-#include <stdint.h>
 #include "tests/arc4.h"
+#include <stdint.h>
 
 /* Swap bytes. */
 static inline void
