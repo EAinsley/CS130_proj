@@ -26,4 +26,7 @@ void timer_ndelay (int64_t nanoseconds);
 
 void timer_print_stats (void);
 
+/* Awake threads that need to be awaked.*/
+void awake_sleep_threads (void);
+
 #endif /* devices/timer.h */
