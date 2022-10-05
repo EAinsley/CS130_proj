@@ -30,6 +30,9 @@ static void busy_wait (int64_t loops);
 static void real_time_sleep (int64_t num, int32_t denom);
 static void real_time_delay (int64_t num, int32_t denom);
 
+/* Awake threads that need to be awaked.*/
+static void awake_sleep_threads (void);
+
 /* List of sleep threads and its lock*/
 static struct list sleep_queue;
 static struct lock sleep_queue_lock;
@@ -275,7 +278,7 @@ real_time_delay (int64_t num, int32_t denom)
 /* Iterate through the sleep thread queue to find threads need to be awaked.
  * Remove them from the list. This function can only be called by timer
  * interrupt.*/
-void
+static void
 awake_sleep_threads (void)
 {
   // This function is supposed called by the timer interrupt, therefore, the
