@@ -105,7 +105,7 @@ timer_sleep (int64_t ticks)
   // Lock the global sleep thread list. This must be done before disable the
   // interrupt. Since we cannot assure that lock was not occupied, if we
   // disable the interrupt first, other thread may not able to return the lock,
-  // wich will risk dead lock.
+  // which will risk dead lock.
   lock_acquire (&sleep_list_lock);
   // Disable interrupt
   enum intr_level old_level = intr_disable ();
