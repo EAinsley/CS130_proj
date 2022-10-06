@@ -112,8 +112,15 @@ timer_sleep (int64_t ticks)
   // Set proper sleep time for the current thread.
   struct thread *thread_curr = thread_current ();
   thread_curr->sleep_to = start + ticks;
-  // Add thread to sleep list;
-  list_push_back (&sleep_list, &thread_curr->sleepelem);
+  // Add thread to sleep list using insertion sort;
+  struct list_elem *first_big = list_begin (&sleep_list);
+  while (first_big != list_end (&sleep_list)
+         && list_entry (first_big, struct thread, sleepelem)->sleep_to
+                < thread_curr->sleep_to)
+    {
+      first_big = list_next (first_big);
+    }
+  list_insert (first_big, &thread_curr->sleepelem);
   // Release the lock before block the thread.
   lock_release (&sleep_list_lock);
   // Wait until wake up by the timer interrupt
@@ -286,18 +293,11 @@ awake_sleep_threads (void)
   ASSERT (intr_get_level () == INTR_OFF);
   // Iterate through the list.
   struct list_elem *e = list_begin (&sleep_list);
-  while (e != list_end (&sleep_list))
+  struct thread *st = list_entry (e, struct thread, sleepelem);
+  while (e != list_end (&sleep_list) && st->sleep_to <= timer_ticks ())
     {
-      struct thread *st = list_entry (e, struct thread, sleepelem);
-      if (timer_ticks () >= st->sleep_to)
-        // Wake up the thread and remove it from sleep thread list.
-        {
-          thread_unblock (st);
-          e = list_remove (e);
-        }
-      else
-        {
-          e = list_next (e);
-        }
+      thread_unblock (st);
+      e = list_remove (e);
+      st = list_entry (e, struct thread, sleepelem);
     }
 }
