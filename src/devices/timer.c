@@ -35,7 +35,7 @@ static void awake_sleep_threads (void);
 
 /* List of sleep threads and its lock*/
 static struct list sleep_list;
-static struct lock sleep_list_lock;
+static struct lock timer_sleep_lock;
 
 /* Sets up the timer to interrupt TIMER_FREQ times per second,
    and registers the corresponding interrupt. */
@@ -46,7 +46,7 @@ timer_init (void)
   intr_register_ext (0x20, timer_interrupt, "8254 Timer");
   // Initialize sleep_list and the lock
   list_init (&sleep_list);
-  lock_init (&sleep_list_lock);
+  lock_init (&timer_sleep_lock);
 }
 
 /* Calibrates loops_per_tick, used to implement brief delays. */
@@ -106,7 +106,7 @@ timer_sleep (int64_t ticks)
   // interrupt. Since we cannot assure that lock was not occupied, if we
   // disable the interrupt first, other thread may not able to return the lock,
   // which will risk dead lock.
-  lock_acquire (&sleep_list_lock);
+  lock_acquire (&timer_sleep_lock);
   // Disable interrupt
   enum intr_level old_level = intr_disable ();
   // Set proper sleep time for the current thread.
@@ -122,7 +122,7 @@ timer_sleep (int64_t ticks)
     }
   list_insert (first_big, &thread_curr->sleepelem);
   // Release the lock before block the thread.
-  lock_release (&sleep_list_lock);
+  lock_release (&timer_sleep_lock);
   // Wait until wake up by the timer interrupt
   thread_block ();
   // Recover the interrupt level.
