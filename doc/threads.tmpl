@@ -8,9 +8,8 @@
 
 >> Fill in the names and email addresses of your group members.
 
-FirstName LastName <email@domain.example>
-FirstName LastName <email@domain.example>
-FirstName LastName <email@domain.example>
+Huizhe Su <suhzh@shanghaitech.edu.cn>
+Cheng Peng <pengcheng2.shanghaitech.edu.cn>
 
 ---- PRELIMINARIES ----
 
@@ -30,26 +29,61 @@ FirstName LastName <email@domain.example>
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+Add a list to store the sleep threas and its lock to synchronize.
+```c
+/* List of sleep threads and its lock*/
+static struct list sleep_list;
+static struct lock timer_sleep_lock;
+```
+
+Add to `struct thread` in `threads/thread.h`
+```c
+struct thread
+{
+  /* Owned by timer.c */
+  struct list_elem sleepelem; /* List element for sleep thread queue*/
+  int64_t sleep_to;           /* sleep until `sleep_tp` ticks */
+```
+
 ---- ALGORITHMS ----
 
 >> A2: Briefly describe what happens in a call to timer_sleep(),
 >> including the effects of the timer interrupt handler.
+When calling `timer_sleep()`, we first calculate until when (in ticks) the thread needs to sleep. Then we insert the thread into `sleep_list` and block the thread. 
+The timer interrupt handler will check the `sleep_list` to find the threads need to be awaken. It will unblock those threads and remove them from the list.
 
 >> A3: What steps are taken to minimize the amount of time spent in
 >> the timer interrupt handler?
+First, when inserting thread into `sleep_list`, we ensure that the threads in the list are sorted in ascending order by their `sleep_to` fields. 
+Then the timer interrupt only need to check the first few threads until it found the first thread which still needs sleeo. This only costs constant time.
 
 ---- SYNCHRONIZATION ----
 
 >> A4: How are race conditions avoided when multiple threads call
 >> timer_sleep() simultaneously?
+We use `timer_sleep_lock` to lock the `sleep_list` when a thread trying to access `sleep_list` in `timer_sleep()`, and release the lock after all the operation with the list are done. They will access the list one by one and there is no any race conditions.
 
 >> A5: How are race conditions avoided when a timer interrupt occurs
 >> during a call to timer_sleep()?
+When a thread acquires the `timer_sleep_lock`, it will disable interrupt immediately and will not allow interrupt until the sleep thread is blocked. There might be a tricky condition that a timer interrupt occurs right after the it acquiring the lock. However, since the interrupt will not allow any other interrupt (in PintOS), there is no worry about race condition.
 
 ---- RATIONALE ----
 
 >> A6: Why did you choose this design?  In what ways is it superior to
 >> another design you considered?
+
+First, I consider to use another thread to monitor all the sleep thread. Each time this thread runs, it will wake up all the other threads which should not be sleeping any more. However, this approach needs to initialize a thread immediately after the os was booted. This may be inefficient. In logic, letting timer owns a standalone thread to monitor other thread is not reasonable. What's more, it is uncertain when the monitor thread will be run, so the sleep time for each thread may be inaccurate.
+
+Next, I try to make use of `timer_interrupt ()`. I came up with three designs, but only differ in their data strucure. 
+
+- My current design.
+- My current design, but use a priority queue instead of a list to store all the sleep threads.
+- My current design, but not use a seperate list. Each time go through all threads to check if the threads need to be awaken.
+
+In theory, the second design may be faster than my current design, but the implementation is too complicated. I also notice that in practice, there will not be too many threads sleeping at the same time. Even if my design requires $O(n)$ when inserting and the second design only requires $O(\log n)$, the gap is negligible.
+The third design is too inefficient.
+
+Therefore, I choose the current design because its simple to implement and is also efficient.
 
              PRIORITY SCHEDULING
              ===================
