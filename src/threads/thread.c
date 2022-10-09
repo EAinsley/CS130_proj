@@ -357,7 +357,8 @@ thread_set_priority (int new_priority)
 
   struct thread *cur_thr = thread_current ();
   cur_thr->priority = new_priority;
-  //
+
+  // switch to higher priority thread if exists
   if (!list_empty (&ready_list)
       && list_entry (list_front (&ready_list), struct thread, elem)->priority
              > new_priority)
