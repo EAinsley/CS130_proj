@@ -33,8 +33,6 @@ static void real_time_delay (int64_t num, int32_t denom);
 /* Awake threads that need to be awaked.*/
 static void awake_sleep_threads (void);
 
-static void update_cpu_time (struct thread *, void *);
-
 /* List of sleep threads and its lock*/
 static struct list sleep_list;
 static struct lock timer_sleep_lock;
@@ -214,7 +212,7 @@ timer_interrupt (struct intr_frame *args UNUSED)
   thread_tick ();
   if (timer_ticks () % TIMER_FREQ == 0)
     {
-      thread_foreach (update_cpu_time, NULL);
+      thread_foreach (thread_update_cpu_time, NULL);
       thread_update_load_avg ();
     }
 
@@ -319,18 +317,4 @@ awake_sleep_threads (void)
       e = list_remove (e);
       st = list_entry (e, struct thread, sleepelem);
     }
-}
-
-/* mlfqs update cpu time*/
-static void
-update_cpu_time (struct thread *t, void *aux UNUSED)
-{
-  // recent_cpu = (2 * load_avg) / (2 * load_avg + 1) * recent_cpu + nice
-  fp14 two_of_load_avg
-      = fp14_mul_int (int_to_fp14 (thread_get_load_avg ()), 2);
-  t->recent_cpu = fp14_add_int (
-      fp14_mul_fp14 (
-          fp14_div_fp14 (two_of_load_avg, fp14_add_int (two_of_load_avg, 1)),
-          t->recent_cpu),
-      t->nice);
 }

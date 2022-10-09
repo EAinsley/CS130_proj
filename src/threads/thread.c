@@ -145,10 +145,10 @@ thread_tick (void)
   else
     {
       kernel_ticks++;
-      if (mlfqs_calculate_priority)
+      if (thread_mlfqs)
         {
           // update recent_cpu
-          fp14_add_int (t->recent_cpu, 1);
+          t->recent_cpu = fp14_add_int (t->recent_cpu, 1);
         }
     }
 
@@ -396,7 +396,11 @@ thread_get_load_avg (void)
 int
 thread_get_recent_cpu (void)
 {
-  return fp14_to_int_round (fp14_mul_int (thread_current ()->recent_cpu, 100));
+  enum intr_level old_level = intr_disable ();
+  int value
+      = fp14_to_int_round (fp14_mul_int (thread_current ()->recent_cpu, 100));
+  intr_set_level (old_level);
+  return value;
 }
 
 void
@@ -687,4 +691,18 @@ static inline int
 minmax (int value, int min_val, int max_val)
 {
   return max (min_val, min (max_val, value));
+}
+
+/* mlfqs update cpu time*/
+void
+thread_update_cpu_time (struct thread *t, void *aux UNUSED)
+{
+  ASSERT (intr_get_level () == INTR_OFF);
+  // recent_cpu = (2 * load_avg) / (2 * load_avg + 1) * recent_cpu + nice
+  fp14 two_of_load_avg = fp14_mul_int (load_avg, 2);
+  t->recent_cpu = fp14_add_int (
+      fp14_mul_fp14 (
+          fp14_div_fp14 (two_of_load_avg, fp14_add_int (two_of_load_avg, 1)),
+          t->recent_cpu),
+      t->nice);
 }
