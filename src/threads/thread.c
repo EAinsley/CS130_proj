@@ -246,7 +246,8 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  // insert the thread into ready list, preserving the priority descending order
+  // insert the thread into ready list, preserving the priority descending
+  // order
   list_insert_ordered (&ready_list, &t->elem, thread_priority_cmp, NULL);
   t->status = THREAD_READY;
   intr_set_level (old_level);
@@ -350,9 +351,10 @@ thread_set_priority (int new_priority)
 
   struct thread *cur_thr = thread_current ();
   cur_thr->priority = new_priority;
-  // 
-  if(!list_empty(&ready_list) &&
-    list_entry(list_front(&ready_list), struct thread, elem)->priority > new_priority)
+  //
+  if (!list_empty (&ready_list)
+      && list_entry (list_front (&ready_list), struct thread, elem)->priority
+             > new_priority)
     thread_yield ();
 
   intr_set_level (old_level);
@@ -365,11 +367,14 @@ thread_get_priority (void)
   return thread_current ()->priority;
 }
 
-/* binary comparator for sorting threads by their priority into descending order */
+/* binary comparator for sorting threads by their priority into descending
+ * order */
 bool
-thread_priority_cmp (const struct list_elem *t0, const struct list_elem *t1, void *aux UNUSED)
+thread_priority_cmp (const struct list_elem *t0, const struct list_elem *t1,
+                     void *aux UNUSED)
 {
-  return list_entry (t0, struct thread, elem)->priority > list_entry (t1, struct thread, elem)->priority;
+  return list_entry (t0, struct thread, elem)->priority
+         > list_entry (t1, struct thread, elem)->priority;
 }
 
 /* Sets the current thread's nice value to NICE. */
