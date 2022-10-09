@@ -95,8 +95,7 @@ timer_elapsed (int64_t then)
 }
 
 /* A comparator that orders the threads in ascending order by sleep_to field */
-static
-bool
+static bool
 thread_sleepto_less (const struct list_elem *t0, const struct list_elem *t1, void *aux UNUSED)
 {
   return list_entry(t0, struct thread, sleepelem)->sleep_to < list_entry(t1, struct thread, sleepelem)->sleep_to;
@@ -122,7 +121,7 @@ timer_sleep (int64_t ticks)
   thread_curr->sleep_to = start + ticks;
 
   // Add the thread to sleep list preserving the order of sleepto field.
-  list_insert_ordered(&sleep_list, &thread_curr->sleepelem, thread_sleepto_less, NULL);
+  list_insert_ordered (&sleep_list, &thread_curr->sleepelem, thread_sleepto_less, NULL);
 
   // Release the lock before block the thread.
   lock_release (&timer_sleep_lock);
