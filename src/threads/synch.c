@@ -114,10 +114,18 @@ sema_up (struct semaphore *sema)
 
   old_level = intr_disable ();
   if (!list_empty (&sema->waiters))
-    thread_unblock (
-        list_entry (list_pop_front (&sema->waiters), struct thread, elem));
+    {
+      // unblock the waiter with highest priority
+      struct list_elem *waiter
+          = list_min (&sema->waiters, thread_priority_cmp, NULL);
+      list_remove (waiter);
+      thread_unblock (list_entry (waiter, struct thread, elem));
+    }
   sema->value++;
   intr_set_level (old_level);
+  // suspend the current thread,
+  // let scheduler wake up the one with highest priority
+  thread_yield ();
 }
 
 static void sema_test_helper (void *sema_);
@@ -301,6 +309,23 @@ cond_wait (struct condition *cond, struct lock *lock)
   lock_acquire (lock);
 }
 
+/* A binary comparator that can sort waiters of a conditional variable
+  into descending order by their priority.
+*/
+static bool
+cond_waiter_priority_cmp (const struct list_elem *w0,
+                          const struct list_elem *w1, void *aux UNUSED)
+{
+  struct semaphore_elem *s0 = list_entry (w0, struct semaphore_elem, elem);
+  struct semaphore_elem *s1 = list_entry (w1, struct semaphore_elem, elem);
+  struct thread *t0
+      = list_entry (list_front (&s0->semaphore.waiters), struct thread, elem);
+  struct thread *t1
+      = list_entry (list_front (&s1->semaphore.waiters), struct thread, elem);
+
+  return t0->priority > t1->priority;
+}
+
 /* If any threads are waiting on COND (protected by LOCK), then
    this function signals one of them to wake up from its wait.
    LOCK must be held before calling this function.
@@ -316,10 +341,20 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED)
   ASSERT (!intr_context ());
   ASSERT (lock_held_by_current_thread (lock));
 
+  enum intr_level old_level = intr_disable ();
   if (!list_empty (&cond->waiters))
-    sema_up (&list_entry (list_pop_front (&cond->waiters),
-                          struct semaphore_elem, elem)
-                  ->semaphore);
+    {
+      // wake up the one with highest priority
+      struct list_elem *waiter
+          = list_min (&cond->waiters, cond_waiter_priority_cmp, NULL);
+      list_remove (waiter);
+      sema_up (&list_entry (waiter, struct semaphore_elem, elem)->semaphore);
+    }
+  intr_set_level (old_level);
+
+  // a thread with higher priority might be waken up
+  // scheduler will run it.
+  thread_yield ();
 }
 
 /* Wakes up all threads, if any, waiting on COND (protected by
