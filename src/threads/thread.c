@@ -1,4 +1,5 @@
 #include "threads/thread.h"
+#include "fixed-point.h"
 #include "threads/flags.h"
 #include "threads/interrupt.h"
 #include "threads/intr-stubs.h"
@@ -49,6 +50,7 @@ struct kernel_thread_frame
 static long long idle_ticks;   /* # of timer ticks spent idle. */
 static long long kernel_ticks; /* # of timer ticks in kernel threads. */
 static long long user_ticks;   /* # of timer ticks in user programs. */
+static fp14 load_avg;          /* The load  average*/
 
 /* Scheduling. */
 #define TIME_SLICE 4          /* # of timer ticks to give each thread. */
@@ -70,6 +72,14 @@ static void *alloc_frame (struct thread *, size_t size);
 static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
+
+static int mlfqs_calculate_priority (struct thread *);
+static void update_priority (struct thread *, void *);
+static inline int min (int, int);
+static inline int max (int, int);
+static inline int minmax (int, int, int);
+static bool thread_priority_more (const struct list_elem *,
+                                  const struct list_elem *, void *);
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -127,12 +137,20 @@ thread_tick (void)
   /* Update statistics. */
   if (t == idle_thread)
     idle_ticks++;
+
 #ifdef USERPROG
   else if (t->pagedir != NULL)
     user_ticks++;
 #endif
   else
-    kernel_ticks++;
+    {
+      kernel_ticks++;
+      if (mlfqs_calculate_priority)
+        {
+          // update recent_cpu
+          fp14_add_int (t->recent_cpu, 1);
+        }
+    }
 
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
@@ -308,7 +326,7 @@ thread_yield (void)
 
   old_level = intr_disable ();
   if (cur != idle_thread)
-    list_push_back (&ready_list, &cur->elem);
+    list_insert_ordered (&ready_list, &cur->elem, thread_priority_more, NULL);
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -347,33 +365,59 @@ thread_get_priority (void)
 
 /* Sets the current thread's nice value to NICE. */
 void
-thread_set_nice (int nice UNUSED)
+thread_set_nice (int new_nice)
 {
-  /* Not yet implemented. */
+  ASSERT (new_nice <= 20);
+  ASSERT (new_nice >= -20);
+  struct thread *t = thread_current ();
+  t->nice = new_nice;
+  t->priority = mlfqs_calculate_priority (thread_current ());
+  thread_yield ();
 }
 
 /* Returns the current thread's nice value. */
 int
 thread_get_nice (void)
 {
-  /* Not yet implemented. */
-  return 0;
+  return thread_current ()->nice;
 }
 
 /* Returns 100 times the system load average. */
 int
 thread_get_load_avg (void)
 {
-  /* Not yet implemented. */
-  return 0;
+  enum intr_level old_level = intr_disable ();
+  int value = fp14_to_int_round (fp14_mul_int (load_avg, 100));
+  intr_set_level (old_level);
+  return value;
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
 int
 thread_get_recent_cpu (void)
 {
-  /* Not yet implemented. */
-  return 0;
+  return fp14_to_int_round (fp14_mul_int (thread_current ()->recent_cpu, 100));
+}
+
+void
+thread_update_priority (void)
+{
+  thread_foreach (update_priority, NULL);
+}
+
+// load_avg = (59 / 60) * load_avg + (1 / 60) * ready_threads
+void
+thread_update_load_avg (void)
+{
+  fp14 ready_threads_with_coef = 0;
+  if (thread_current () != idle_thread)
+    {
+      ready_threads_with_coef
+          = fp14_div_int (int_to_fp14 (list_size (&ready_list) + 1), 60);
+    }
+  fp14 load_avg_with_coef = fp14_mul_fp14 (
+      fp14_div_fp14 (int_to_fp14 (59), int_to_fp14 (60)), load_avg);
+  load_avg = fp14_add_fp14 (load_avg_with_coef, ready_threads_with_coef);
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
@@ -461,7 +505,24 @@ init_thread (struct thread *t, const char *name, int priority)
   t->status = THREAD_BLOCKED;
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *)t + PGSIZE;
-  t->priority = priority;
+  if (thread_mlfqs)
+    {
+      if (t == initial_thread)
+        {
+          t->nice = 0;
+          t->recent_cpu = 0.0;
+        }
+      else
+        {
+          t->recent_cpu = thread_current ()->recent_cpu;
+          t->nice = thread_current ()->nice;
+        }
+      t->priority = mlfqs_calculate_priority (t);
+    }
+  else
+    {
+      t->priority = priority;
+    }
   t->magic = THREAD_MAGIC;
 
   old_level = intr_disable ();
@@ -582,3 +643,48 @@ allocate_tid (void)
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
+
+/* A comparator that orders the threads in descending order by priority field
+ */
+static bool
+thread_priority_more (const struct list_elem *t0, const struct list_elem *t1,
+                      void *aux UNUSED)
+{
+  return list_entry (t0, struct thread, sleepelem)->priority
+         > list_entry (t1, struct thread, sleepelem)->priority;
+}
+
+/* mlfqs calculate priority
+  Priority = PRI_MAX - (recent_cpu / 4) - (nice * 2)
+*/
+static int
+mlfqs_calculate_priority (struct thread *t)
+{
+  int raw_priority = PRI_MAX
+                     - fp14_to_int_round (fp14_div_int (t->recent_cpu, 4))
+                     - (t->nice * 2);
+  return minmax (raw_priority, PRI_MIN, PRI_MAX);
+}
+
+static void
+update_priority (struct thread *t, void *aux UNUSED)
+{
+  t->priority = mlfqs_calculate_priority (t);
+}
+
+static inline int
+min (int a, int b)
+{
+  return a < b ? a : b;
+}
+
+static inline int
+max (int a, int b)
+{
+  return a > b ? a : b;
+}
+static inline int
+minmax (int value, int min_val, int max_val)
+{
+  return max (min_val, min (max_val, value));
+}
