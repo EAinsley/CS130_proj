@@ -204,10 +204,7 @@ thread_create (const char *name, int priority, thread_func *function,
   // switch immediately if the priorty of newly created one
   // is higher than the priority current one
   enum intr_level old_level = intr_disable ();
-  if (thread_current ()->priority < t->priority)
-    {
-      thread_yield ();
-    }
+  thread_yield ();
   intr_set_level (old_level);
 
   return tid;
