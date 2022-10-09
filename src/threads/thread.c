@@ -229,13 +229,6 @@ thread_block (void)
   schedule ();
 }
 
-/* binary comparator for sorting threads by their priority into descending order */
-static bool
-thread_priority_cmp (const struct list_elem *t0, const struct list_elem *t1, void *aux UNUSED)
-{
-  return list_entry (t0, struct thread, elem)->priority > list_entry (t1, struct thread, elem)->priority;
-}
-
 /* Transitions a blocked thread T to the ready-to-run state.
    This is an error if T is not blocked.  (Use thread_yield() to
    make the running thread ready.)
@@ -370,6 +363,13 @@ int
 thread_get_priority (void)
 {
   return thread_current ()->priority;
+}
+
+/* binary comparator for sorting threads by their priority into descending order */
+bool
+thread_priority_cmp (const struct list_elem *t0, const struct list_elem *t1, void *aux UNUSED)
+{
+  return list_entry (t0, struct thread, elem)->priority > list_entry (t1, struct thread, elem)->priority;
 }
 
 /* Sets the current thread's nice value to NICE. */
