@@ -255,7 +255,7 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_push_back (&ready_list, &t->elem);
+  list_insert_ordered (&ready_list, &t->elem, thread_priority_more, NULL);
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -406,7 +406,9 @@ thread_get_recent_cpu (void)
 void
 thread_update_priority (void)
 {
+  ASSERT (intr_get_level () == INTR_OFF);
   thread_foreach (update_priority, NULL);
+  list_sort (&ready_list, thread_priority_more, NULL);
 }
 
 // load_avg = (59 / 60) * load_avg + (1 / 60) * ready_threads
@@ -654,8 +656,8 @@ static bool
 thread_priority_more (const struct list_elem *t0, const struct list_elem *t1,
                       void *aux UNUSED)
 {
-  return list_entry (t0, struct thread, sleepelem)->priority
-         > list_entry (t1, struct thread, sleepelem)->priority;
+  return list_entry (t0, struct thread, elem)->priority
+         > list_entry (t1, struct thread, elem)->priority;
 }
 
 /* mlfqs calculate priority
@@ -664,6 +666,8 @@ thread_priority_more (const struct list_elem *t0, const struct list_elem *t1,
 static int
 mlfqs_calculate_priority (struct thread *t)
 {
+  if (t == idle_thread)
+    return 0;
   int raw_priority = PRI_MAX
                      - fp14_to_int_round (fp14_div_int (t->recent_cpu, 4))
                      - (t->nice * 2);
