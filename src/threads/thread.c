@@ -251,6 +251,12 @@ thread_unblock (struct thread *t)
   list_insert_ordered (&ready_list, &t->elem, thread_priority_cmp, NULL);
   t->status = THREAD_READY;
   intr_set_level (old_level);
+
+  // a higher priority thread is ready, switch to it
+  if (t->priority > thread_current ()->priority)
+    {
+      thread_yield ();
+    }
 }
 
 /* Returns the name of the running thread. */
