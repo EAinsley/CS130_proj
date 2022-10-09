@@ -415,15 +415,15 @@ thread_update_priority (void)
 void
 thread_update_load_avg (void)
 {
-  fp14 ready_threads_with_coef = 0;
+  ASSERT (intr_get_level () == INTR_OFF);
+  fp14 ready_threads = 0;
   if (thread_current () != idle_thread)
     {
-      ready_threads_with_coef
-          = fp14_div_int (int_to_fp14 (list_size (&ready_list) + 1), 60);
+      ready_threads = int_to_fp14 (list_size (&ready_list) + 1);
     }
-  fp14 load_avg_with_coef = fp14_mul_fp14 (
-      fp14_div_fp14 (int_to_fp14 (59), int_to_fp14 (60)), load_avg);
-  load_avg = fp14_add_fp14 (load_avg_with_coef, ready_threads_with_coef);
+  fp14 load_avg_with_coef = fp14_mul_int (load_avg, 59);
+  load_avg
+      = fp14_div_int (fp14_add_fp14 (load_avg_with_coef, ready_threads), 60);
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
@@ -668,9 +668,8 @@ mlfqs_calculate_priority (struct thread *t)
 {
   if (t == idle_thread)
     return 0;
-  int raw_priority = PRI_MAX
-                     - fp14_to_int_round (fp14_div_int (t->recent_cpu, 4))
-                     - (t->nice * 2);
+  int raw_priority
+      = PRI_MAX - fp14_to_int_trunc (t->recent_cpu) / 4 - (t->nice * 2);
   return minmax (raw_priority, PRI_MIN, PRI_MAX);
 }
 
