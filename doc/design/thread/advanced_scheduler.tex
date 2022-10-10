@@ -1,0 +1,67 @@
+\section{ADVANCED SCHEDULER}
+\begin{aspect}{DATA STRUCTURES}
+  \begin{qc}
+    C1: Copy here the declaration of each new or changed `struct' or `struct' member, global or static variable, `typedef', or enumeration.  Identify the purpose of each in 25 words or less.
+  \end{qc}
+\end{aspect}
+\begin{aspect}{DATA STRUCTURES}
+  \begin{qc}
+    C2: Suppose threads A, B, and C have nice values 0, 1, and 2.  Each has a \lstinline{recent_cpu} value of 0.  Fill in the table below showing the scheduling decision and the priority and \lstinline{recent_cpu} values for each thread after each given number of timer ticks:
+  \end{qc}
+  \centering
+
+  \begin{tabular}{|c|c|c|c|c|c|c|c|}
+    \hline
+    % \multicolumn{1}{c}{\multirow{2}{*}{timer ticks}}
+    %  & \multirow{3}{2-4}{\lstinline{recent_cpu}}
+    %  & \multirow{3}{5-7}{\lstinline{priority}}
+    % \multicolumn{1}{c}{\multirow{2}{*}{thread to run}}                   \\
+    \multirow{{2}}{*}{\makecell{timer                                      \\ ticks}}
+       & \multicolumn{3}{c|}{\lstinline{recent_cpu}}
+       & \multicolumn{3}{c|}{\lstinline{priority}}   &
+    \multirow{2}{*}{\makecell{thread                                       \\to run}}    \\
+    \cline{2-7}
+
+       & A                                           & B & C & A & B & C & \\
+    \hline
+    0  &                                             &   &   &   &   &   & \\
+    \hline
+    4  &                                             &   &   &   &   &   & \\
+    \hline
+    8  &                                             &   &   &   &   &   & \\
+    \hline
+    12 &                                             &   &   &   &   &   & \\
+    \hline
+    16 &                                             &   &   &   &   &   & \\
+    \hline
+    20 &                                             &   &   &   &   &   & \\
+    \hline
+    24 &                                             &   &   &   &   &   & \\
+    \hline
+    28 &                                             &   &   &   &   &   & \\
+    \hline
+    32 &                                             &   &   &   &   &   & \\
+    \hline
+    36 &                                             &   &   &   &   &   & \\
+    \hline
+  \end{tabular}
+
+  \begin{qc}
+    C3: Did any ambiguities in the scheduler specification make values in the table uncertain?  If so, what rule did you use to resolve them?  Does this match the behavior of your scheduler?
+  \end{qc}
+  \begin{qc}
+    C4: How is the way you divided the cost of scheduling between code inside and outside interrupt context likely to affect performance?
+  \end{qc}
+
+\end{aspect}
+
+\begin{aspect}{RATIONALE}
+  \begin{qc}
+    C5: Briefly critique your design, pointing out advantages and disadvantages in your design choices.  If you were to have extra time to work on this part of the project, how might you choose to refine or improve your design?
+  \end{qc}
+
+  \begin{qc}
+    C6: The assignment explains arithmetic for fixed-point math in detail, but it leaves it open to you to implement it.  Why did you decide to implement it the way you did?  If you created an abstraction layer for fixed-point math, that is, an abstract data type and/or a set of functions or macros to manipulate fixed-point numbers, why did you do so?  If not, why not?
+  \end{qc}
+
+\end{aspect}
