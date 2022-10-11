@@ -2,56 +2,100 @@
 \begin{aspect}{DATA STRUCTURES}
   \begin{qc}
     C1: Copy here the declaration of each new or changed `struct' or `struct' member, global or static variable, `typedef', or enumeration.  Identify the purpose of each in 25 words or less.
+    Add to \lstinline{struct thread}.
   \end{qc}
+  \begin{lstlisting}
+int nice;                  /* mlfqs niceness*/
+fp14 recent_cpu;           /* mlfqs recent_cpu */
+    \end{lstlisting}
+  \lstinline{fp14} is the fixed point type, which is defined in fixed-point.h.
+  \begin{lstlisting}
+typedef signed int fp14;
+// Convert n to fixed point: n * f
+#define int_to_fp14(n) ((n) << 14)
+// Convert x to interger: x / f
+#define fp14_to_int_trunc(x) ((x) >> 14)
+// convert x to interger (rounding to nearest):
+// (x + f / 2) / f if x >= 0
+// (x - f / 2) /f if x <= 0
+#define fp14_to_int_round(x)                                                  \
+((x) >= 0 ? (((x) + (1 << 13)) >> 14) : (((x) - (1 << 13)) >> 14))
+// Add x and y: x + y
+#define fp14_add_fp14(x, y) ((x) + (y))
+// Subtract y from x
+#define fp14_sub_fp14(x, y) ((x) - (y))
+// Add x and n
+#define fp14_add_int(x, n) ((x) + ((n) << 14))
+// Subtract n from x
+#define fp14_sub_int(x, n) ((x) - ((n) << 14))
+// Multiply x by y
+#define fp14_mul_fp14(x, y) ((((int64_t)(x)) * (y)) >> 14)
+// Multiply x by n
+#define fp14_mul_int(x, n) ((x) * (n))
+// Divide x by y
+#define fp14_div_fp14(x, y) ((((int64_t)(x)) << 14) / (y))
+// Divide x by n
+#define fp14_div_int(x, n) ((x) / (n))
+  \end{lstlisting}
+  In thread.c
+  \begin{lstlisting}
+static fp14 load_avg;          /* The load  average*/
+  \end{lstlisting}
+  is the global \lstinline{load_avg}.
 \end{aspect}
 \begin{aspect}{DATA STRUCTURES}
   \begin{qc}
     C2: Suppose threads A, B, and C have nice values 0, 1, and 2.  Each has a \lstinline{recent_cpu} value of 0.  Fill in the table below showing the scheduling decision and the priority and \lstinline{recent_cpu} values for each thread after each given number of timer ticks:
   \end{qc}
-  \centering
+  \begin{center}
+    \begin{tabular}{|c|c|c|c|c|c|c|c|}
+      \hline
+      % \multicolumn{1}{c}{\multirow{2}{*}{timer ticks}}
+      %  & \multirow{3}{2-4}{\lstinline{recent_cpu}}
+      %  & \multirow{3}{5-7}{\lstinline{priority}}
+      % \multicolumn{1}{c}{\multirow{2}{*}{thread to run}}                   \\
+      \multirow{{2}}{*}{\makecell{timer                                          \\ ticks}}
+                                                &
+      \multicolumn{3}{c|}{\lstinline{recent_cpu}}
+                                                &
+      \multicolumn{3}{c|}{\lstinline{priority}} &
+      \multirow{2}{*}{\makecell{thread                                           \\to run}}    \\
+      \cline{2-7}
 
-  \begin{tabular}{|c|c|c|c|c|c|c|c|}
-    \hline
-    % \multicolumn{1}{c}{\multirow{2}{*}{timer ticks}}
-    %  & \multirow{3}{2-4}{\lstinline{recent_cpu}}
-    %  & \multirow{3}{5-7}{\lstinline{priority}}
-    % \multicolumn{1}{c}{\multirow{2}{*}{thread to run}}                   \\
-    \multirow{{2}}{*}{\makecell{timer                                      \\ ticks}}
-       & \multicolumn{3}{c|}{\lstinline{recent_cpu}}
-       & \multicolumn{3}{c|}{\lstinline{priority}}   &
-    \multirow{2}{*}{\makecell{thread                                       \\to run}}    \\
-    \cline{2-7}
-
-       & A                                           & B & C & A & B & C & \\
-    \hline
-    0  &                                             &   &   &   &   &   & \\
-    \hline
-    4  &                                             &   &   &   &   &   & \\
-    \hline
-    8  &                                             &   &   &   &   &   & \\
-    \hline
-    12 &                                             &   &   &   &   &   & \\
-    \hline
-    16 &                                             &   &   &   &   &   & \\
-    \hline
-    20 &                                             &   &   &   &   &   & \\
-    \hline
-    24 &                                             &   &   &   &   &   & \\
-    \hline
-    28 &                                             &   &   &   &   &   & \\
-    \hline
-    32 &                                             &   &   &   &   &   & \\
-    \hline
-    36 &                                             &   &   &   &   &   & \\
-    \hline
-  \end{tabular}
+                                                & A  & B  & C & A  & B  & C  &   \\
+      \hline
+      0                                         & 0  & 0  & 0 & 63 & 61 & 59 & A \\
+      \hline
+      4                                         & 4  & 0  & 0 & 62 & 61 & 59 & A \\
+      \hline
+      8                                         & 8  & 0  & 0 & 61 & 61 & 59 & B \\
+      \hline
+      12                                        & 8  & 4  & 0 & 61 & 60 & 59 & A \\
+      \hline
+      16                                        & 12 & 4  & 0 & 60 & 60 & 59 & B \\
+      \hline
+      20                                        & 12 & 8  & 0 & 60 & 59 & 59 & A \\
+      \hline
+      24                                        & 16 & 8  & 0 & 59 & 59 & 59 & C \\
+      \hline
+      28                                        & 16 & 8  & 4 & 59 & 59 & 58 & B \\
+      \hline
+      32                                        & 16 & 12 & 4 & 59 & 58 & 58 & A \\
+      \hline
+      36                                        & 20 & 12 & 4 & 58 & 58 & 58 & C \\
+      \hline
+    \end{tabular}
+  \end{center}
 
   \begin{qc}
     C3: Did any ambiguities in the scheduler specification make values in the table uncertain?  If so, what rule did you use to resolve them?  Does this match the behavior of your scheduler?
   \end{qc}
+  Yes. Since the \lstinline{priority} decrease one by one \lstinline{TIME_SLICE}, at some point, at least two threads will have the same \lstinline{priority}. In this situation, we use round-robin. Each \lstinline{TIME_SLICE}, the priority of all the threads is recalculated. The current running thread is preempted and it will be inserted to the last of all the threads those has the same \lstinline{priority} in \lstinline{ready_queue}. Therefore, the threads has the same priority will be scheduled one by one. This is exactly the behavior of our scheduler.
   \begin{qc}
     C4: How is the way you divided the cost of scheduling between code inside and outside interrupt context likely to affect performance?
   \end{qc}
+  \lstinline{recent_cpu}, \lstinline{load_avg} and \lstinline{priority} are update during the interrupt context. At some point, they will be update at the same time. This may take too much time and affect the performance.
+
 
 \end{aspect}
 
@@ -59,9 +103,20 @@
   \begin{qc}
     C5: Briefly critique your design, pointing out advantages and disadvantages in your design choices.  If you were to have extra time to work on this part of the project, how might you choose to refine or improve your design?
   \end{qc}
+  We follow the algorithm provided. An obvious problem is that every four ticks, we have to update all threads' \lstinline{priority}. As the number of threads increase, the performance will decrease. We have already make some improvement, that we only update threads in \lstinline{ready_list}. This is because scheduler only want to know which threads has the highest \lstinline{priority} in the \lstinline{ready_list}. Updating the blocked threads will not affect the scheduling. We also have calculate the \lstinline{priority} after the thread being added to the \lstinline{ready_list}.
+
+  There are still some other improvement. Since only the \lstinline{cpu_time} of running thread will change, we can calculate \lstinline{priority} only for running threads every four ticks or before it yields. Since \lstinline{load_avg} and \lstinline{cpu_time} will change every one seconds, we also need to update the \lstinline{priority} of all the threads.
+
+  If we have more time, we may consider to use some heuristics to help us scheduling. This comes from an observation that during one second, threads with high \lstinline{priority} will runs for some time and then the \lstinline{priority} will be the same as some threads with lower \lstinline{priority}. Then they will all go round-robin. Some threads with the lowest \lstinline{priority} will not be run in this seconds. In this case, we may use some huristic depends on their initial \lstinline{priority} and \lstinline{cpu_time} to decide the running time for each threads per seconds. This requires less calculation during the system running.
 
   \begin{qc}
     C6: The assignment explains arithmetic for fixed-point math in detail, but it leaves it open to you to implement it.  Why did you decide to implement it the way you did?  If you created an abstraction layer for fixed-point math, that is, an abstract data type and/or a set of functions or macros to manipulate fixed-point numbers, why did you do so?  If not, why not?
   \end{qc}
-
+  We decided to implement it using macros based on the following reasons:
+  \begin{itemize}
+    \item[1.] Adding new c files is annoying, since we have to change the makefile. Use macros enable us simply put them into header files and conveniently include it.
+    \item[2.] Using functions adds extra overhead for fucntion calling. Macros are only string substitution during compile time. This is more efficient.
+    \item[3.] It's better than directly writing the calculation in the code. Macros add an additional abstract layer for fixed point, which can make the code more clean and reduce errors.
+  \end{itemize}
+  If we are using cpp, we would be happy to write another class for it.
 \end{aspect}
