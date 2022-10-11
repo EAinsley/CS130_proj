@@ -255,6 +255,7 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
+  t->priority = mlfqs_calculate_priority (t);
   list_insert_ordered (&ready_list, &t->elem, thread_priority_more, NULL);
   t->status = THREAD_READY;
   intr_set_level (old_level);
