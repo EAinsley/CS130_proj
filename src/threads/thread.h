@@ -143,6 +143,10 @@ void thread_set_priority (int);
 void thread_update_priority (void);
 void thread_update_cpu_time (struct thread *, void *);
 
+/* Sort list of thread.elem by priority */
+bool thread_priority_more (const struct list_elem *, const struct list_elem *,
+                           void *);
+
 int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);

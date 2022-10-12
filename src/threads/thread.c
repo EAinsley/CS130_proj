@@ -78,8 +78,6 @@ static void update_priority (struct thread *, void *);
 static inline int min (int, int);
 static inline int max (int, int);
 static inline int minmax (int, int, int);
-static bool thread_priority_more (const struct list_elem *,
-                                  const struct list_elem *, void *);
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -219,6 +217,9 @@ thread_create (const char *name, int priority, thread_func *function,
   /* Add to run queue. */
   thread_unblock (t);
 
+  // switch to higher priority thread if there exists such a thread
+  if (priority > thread_get_priority ())
+    thread_yield ();
   return tid;
 }
 
@@ -355,6 +356,9 @@ void
 thread_set_priority (int new_priority)
 {
   thread_current ()->priority = new_priority;
+  // if we have a ready thread with higher priority, switch to it
+  if (!list_empty (&ready_list))
+    thread_yield ();
 }
 
 /* Returns the current thread's priority. */
@@ -653,7 +657,7 @@ uint32_t thread_stack_ofs = offsetof (struct thread, stack);
 
 /* A comparator that orders the threads in descending order by priority field
  */
-static bool
+bool
 thread_priority_more (const struct list_elem *t0, const struct list_elem *t1,
                       void *aux UNUSED)
 {
@@ -667,6 +671,8 @@ thread_priority_more (const struct list_elem *t0, const struct list_elem *t1,
 static int
 mlfqs_calculate_priority (struct thread *t)
 {
+  if (!thread_mlfqs)
+    return t->priority;
   if (t == idle_thread)
     return 0;
   int raw_priority

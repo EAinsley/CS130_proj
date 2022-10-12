@@ -109,14 +109,23 @@ void
 sema_up (struct semaphore *sema)
 {
   enum intr_level old_level;
+  struct thread *wakeup_th = NULL;
 
   ASSERT (sema != NULL);
 
   old_level = intr_disable ();
   if (!list_empty (&sema->waiters))
-    thread_unblock (
-        list_entry (list_pop_front (&sema->waiters), struct thread, elem));
+    {
+      wakeup_th
+          = list_entry (list_min (&sema->waiters, thread_priority_more, NULL),
+                        struct thread, elem);
+      list_remove (&wakeup_th->elem);
+      thread_unblock (wakeup_th);
+    }
   sema->value++;
+  // thread with higher priority has woke up, switch to it.
+  if (wakeup_th && wakeup_th->priority > thread_get_priority ())
+    thread_yield ();
   intr_set_level (old_level);
 }
 
@@ -302,6 +311,21 @@ cond_wait (struct condition *cond, struct lock *lock)
   lock_acquire (lock);
 }
 
+/* Comparator to sort waiter of a condvar by their priority
+ */
+static bool
+cond_waiter_priority_more (const struct list_elem *w0,
+                           const struct list_elem *w1, void *aux UNUSED)
+{
+  struct semaphore s0
+      = list_entry (w0, struct semaphore_elem, elem)->semaphore;
+  struct semaphore s1
+      = list_entry (w1, struct semaphore_elem, elem)->semaphore;
+  struct list_elem *t0 = list_front (&s0.waiters);
+  struct list_elem *t1 = list_front (&s1.waiters);
+  return thread_priority_more (t0, t1, NULL);
+}
+
 /* If any threads are waiting on COND (protected by LOCK), then
    this function signals one of them to wake up from its wait.
    LOCK must be held before calling this function.
@@ -318,9 +342,13 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED)
   ASSERT (lock_held_by_current_thread (lock));
 
   if (!list_empty (&cond->waiters))
-    sema_up (&list_entry (list_pop_front (&cond->waiters),
-                          struct semaphore_elem, elem)
-                  ->semaphore);
+    {
+      struct list_elem *wakeup_elem
+          = list_min (&cond->waiters, cond_waiter_priority_more, NULL);
+      list_remove (wakeup_elem);
+      sema_up (
+          &list_entry (wakeup_elem, struct semaphore_elem, elem)->semaphore);
+    }
 }
 
 /* Wakes up all threads, if any, waiting on COND (protected by
