@@ -85,14 +85,14 @@ typedef int tid_t;
 struct thread
 {
   /* Owned by thread.c. */
-  tid_t tid;                 /* Thread identifier. */
-  enum thread_status status; /* Thread state. */
-  char name[16];             /* Name (for debugging purposes). */
-  uint8_t *stack;            /* Saved stack pointer. */
-  int priority;              /* Priority. */
-  int nice;                  /* mlfqs niceness*/
-  fp14 recent_cpu;           /* mlfqs recent_cpu */
-  struct list_elem allelem;  /* List element for all threads list. */
+  tid_t tid;                       /* Thread identifier. */
+  enum thread_status status;       /* Thread state. */
+  char name[16];                   /* Name (for debugging purposes). */
+  uint8_t *stack;                  /* Saved stack pointer. */
+  int priority, original_priority; /* Priority after/before donation */
+  int nice;                        /* mlfqs niceness*/
+  fp14 recent_cpu;                 /* mlfqs recent_cpu */
+  struct list_elem allelem;        /* List element for all threads list. */
 
   /* Shared between thread.c and synch.c. */
   struct list_elem elem; /* List element. */
@@ -100,6 +100,14 @@ struct thread
   /* Owned by timer.c */
   struct list_elem sleepelem; /* List element for sleep thread queue*/
   int64_t sleep_to;           /* sleep until `sleep_tp` ticks */
+
+  /* for priority donation:
+     a thread gets priority boost when holding locks for which a higher
+     priority thread is waiting
+  */
+  struct lock *wait_lock; /* the lock for which this thread is waiting for,
+                             NULL for running thread */
+  struct list hold_locks; /* the locks hold by this thread */
 
 #ifdef USERPROG
   /* Owned by userprog/process.c. */
@@ -142,6 +150,13 @@ int thread_get_priority (void);
 void thread_set_priority (int);
 void thread_update_priority (void);
 void thread_update_cpu_time (struct thread *, void *);
+
+/* Sort list of thread.elem by priority */
+bool thread_priority_more (const struct list_elem *, const struct list_elem *,
+                           void *);
+
+/* compute the lock priority donation to a thread */
+void thread_upd_lkpri (struct thread *th);
 
 int thread_get_nice (void);
 void thread_set_nice (int);

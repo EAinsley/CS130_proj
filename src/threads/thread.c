@@ -78,8 +78,6 @@ static void update_priority (struct thread *, void *);
 static inline int min (int, int);
 static inline int max (int, int);
 static inline int minmax (int, int, int);
-static bool thread_priority_more (const struct list_elem *,
-                                  const struct list_elem *, void *);
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -219,6 +217,9 @@ thread_create (const char *name, int priority, thread_func *function,
   /* Add to run queue. */
   thread_unblock (t);
 
+  // switch to higher priority thread if there exists such a thread
+  if (priority > thread_get_priority ())
+    thread_yield ();
   return tid;
 }
 
@@ -354,7 +355,20 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority)
 {
-  thread_current ()->priority = new_priority;
+  if (thread_mlfqs)
+    return;
+
+  enum intr_level old_level = intr_disable ();
+
+  struct thread *t = thread_current ();
+  t->original_priority = new_priority;
+  thread_upd_lkpri (t);
+
+  intr_set_level (old_level);
+
+  // if we have a ready thread with higher priority, switch to it
+  if (!list_empty (&ready_list))
+    thread_yield ();
 }
 
 /* Returns the current thread's priority. */
@@ -512,6 +526,12 @@ init_thread (struct thread *t, const char *name, int priority)
   t->status = THREAD_BLOCKED;
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *)t + PGSIZE;
+
+  t->original_priority = priority;
+  t->priority = priority;
+  t->wait_lock = NULL;
+  list_init (&t->hold_locks);
+
   if (thread_mlfqs)
     {
       if (t == initial_thread)
@@ -525,10 +545,6 @@ init_thread (struct thread *t, const char *name, int priority)
           t->nice = thread_current ()->nice;
         }
       t->priority = mlfqs_calculate_priority (t);
-    }
-  else
-    {
-      t->priority = priority;
     }
   t->magic = THREAD_MAGIC;
 
@@ -647,13 +663,31 @@ allocate_tid (void)
   return tid;
 }
 
+/* find the maximum hold lock priority for a thread
+ */
+void
+thread_upd_lkpri (struct thread *th)
+{
+  if (thread_mlfqs)
+    return;
+  th->priority = th->original_priority;
+  struct list *locks = &th->hold_locks;
+  for (struct list_elem *le = list_begin (locks); le != list_end (locks);
+       le = list_next (le))
+    {
+      int lock_pri = list_entry (le, struct lock, elem)->priority;
+      if (th->priority < lock_pri)
+        th->priority = lock_pri;
+    }
+}
+
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
 
 /* A comparator that orders the threads in descending order by priority field
  */
-static bool
+bool
 thread_priority_more (const struct list_elem *t0, const struct list_elem *t1,
                       void *aux UNUSED)
 {
@@ -667,6 +701,8 @@ thread_priority_more (const struct list_elem *t0, const struct list_elem *t1,
 static int
 mlfqs_calculate_priority (struct thread *t)
 {
+  if (!thread_mlfqs)
+    return t->priority;
   if (t == idle_thread)
     return 0;
   int raw_priority
