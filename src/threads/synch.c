@@ -188,6 +188,58 @@ lock_init (struct lock *lock)
 
   lock->holder = NULL;
   sema_init (&lock->semaphore, 1);
+  lock->elem = (struct list_elem){ next : NULL, prev : NULL };
+  lock->priority = PRI_MIN;
+}
+
+static void donate_thread_to_lock (struct thread *th, struct lock *lk);
+static void donate_lock_to_thread (struct lock *lk, struct thread *th);
+
+/* thread th will block and wait for lk,
+   lk get the priority from th
+*/
+static void
+donate_thread_to_lock (struct thread *th, struct lock *lk)
+{
+  if (thread_mlfqs)
+    return;
+  if (th->priority > lk->priority)
+    {
+      lk->priority = th->priority;
+      if (lk->holder)
+        donate_lock_to_thread (lk, lk->holder);
+    }
+}
+/* thread tk acquired lock lk,
+   th get the priority from lk,
+*/
+static void
+donate_lock_to_thread (struct lock *lk, struct thread *th)
+{
+  if (thread_mlfqs)
+    return;
+  if (lk->priority > th->priority)
+    {
+      th->priority = lk->priority;
+      if (th->wait_lock)
+        donate_thread_to_lock (th, th->wait_lock);
+    }
+}
+/* find the maximum waiter priority for a lock */
+void
+lock_upd_thpri (struct lock *lk)
+{
+  if (thread_mlfqs)
+    return;
+  lk->priority = PRI_MIN;
+  struct list *waiters = &lk->semaphore.waiters;
+  for (struct list_elem *we = list_begin (waiters); we != list_end (waiters);
+       we = list_next (we))
+    {
+      int waiter_pri = list_entry (we, struct thread, elem)->priority;
+      if (lk->priority < waiter_pri)
+        lk->priority = waiter_pri;
+    }
 }
 
 /* Acquires LOCK, sleeping until it becomes available if
@@ -205,8 +257,31 @@ lock_acquire (struct lock *lock)
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
 
+  enum intr_level old_level;
+  struct thread *running_thread = thread_current ();
+
+  running_thread->wait_lock = lock;
+  // disable interrupt, prevent interleaving
+  old_level = intr_disable ();
+  if (lock->holder != NULL)
+    {
+      // donate priority to the lock
+      donate_thread_to_lock (running_thread, lock);
+    }
+  intr_set_level (old_level);
+
+  // wait for the lock to become avaiable
   sema_down (&lock->semaphore);
-  lock->holder = thread_current ();
+
+  old_level = intr_disable ();
+
+  running_thread->wait_lock = NULL;
+  lock->holder = running_thread;
+  list_push_back (&running_thread->hold_locks, &lock->elem);
+  lock_upd_thpri (lock);
+  thread_upd_lkpri (running_thread);
+
+  intr_set_level (old_level);
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -225,7 +300,12 @@ lock_try_acquire (struct lock *lock)
 
   success = sema_try_down (&lock->semaphore);
   if (success)
-    lock->holder = thread_current ();
+    {
+      struct thread *running_thread = thread_current ();
+      lock->holder = running_thread;
+      list_push_back (&running_thread->hold_locks, &lock->elem);
+      thread_upd_lkpri (running_thread);
+    }
   return success;
 }
 
@@ -242,6 +322,16 @@ lock_release (struct lock *lock)
 
   lock->holder = NULL;
   sema_up (&lock->semaphore);
+
+  // reset donation
+  enum intr_level old_level = intr_disable ();
+
+  list_remove (&lock->elem);
+  lock_upd_thpri (lock);
+  thread_upd_lkpri (thread_current ());
+
+  intr_set_level (old_level);
+
   thread_yield ();
 }
 
