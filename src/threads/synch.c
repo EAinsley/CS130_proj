@@ -320,11 +320,11 @@ lock_release (struct lock *lock)
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
 
-  lock->holder = NULL;
-  sema_up (&lock->semaphore);
-
   // reset donation
   enum intr_level old_level = intr_disable ();
+
+  lock->holder = NULL;
+  sema_up (&lock->semaphore);
 
   list_remove (&lock->elem);
   lock_upd_thpri (lock);
