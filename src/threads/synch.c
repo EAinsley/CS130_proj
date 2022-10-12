@@ -324,7 +324,6 @@ lock_release (struct lock *lock)
   enum intr_level old_level = intr_disable ();
 
   lock->holder = NULL;
-  sema_up (&lock->semaphore);
 
   list_remove (&lock->elem);
   lock_upd_thpri (lock);
@@ -332,6 +331,7 @@ lock_release (struct lock *lock)
 
   intr_set_level (old_level);
 
+  sema_up (&lock->semaphore);
   thread_yield ();
 }
 
