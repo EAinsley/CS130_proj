@@ -1,16 +1,16 @@
 /* Deletes and closes file that is mapped into memory
    and verifies that it can still be read through the mapping. */
 
-#include <string.h>
-#include <syscall.h>
-#include "tests/vm/sample.inc"
 #include "tests/lib.h"
 #include "tests/main.h"
+#include "tests/vm/sample.inc"
+#include <string.h>
+#include <syscall.h>
 
 void
 test_main (void)
 {
-  char *actual = (char *) 0x10000000;
+  char *actual = (char *)0x10000000;
   int handle;
   mapid_t map;
   size_t i;
@@ -36,8 +36,8 @@ test_main (void)
   /* Verify that data is followed by zeros. */
   for (i = strlen (sample); i < 4096; i++)
     if (actual[i] != 0)
-      fail ("byte %zu of mmap'd region has value %02hhx (should be 0)",
-            i, actual[i]);
+      fail ("byte %zu of mmap'd region has value %02hhx (should be 0)", i,
+            actual[i]);
 
   munmap (map);
 }

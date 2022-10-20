@@ -20,25 +20,25 @@
    linked list implementation.  Refer to lib/kernel/list.h for a
    detailed explanation. */
 
+#include "list.h"
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include "list.h"
 
 /* Hash element. */
-struct hash_elem 
-  {
-    struct list_elem list_elem;
-  };
+struct hash_elem
+{
+  struct list_elem list_elem;
+};
 
 /* Converts pointer to hash element HASH_ELEM into a pointer to
    the structure that HASH_ELEM is embedded inside.  Supply the
    name of the outer structure STRUCT and the member name MEMBER
    of the hash element.  See the big comment at the top of the
    file for an example. */
-#define hash_entry(HASH_ELEM, STRUCT, MEMBER)                   \
-        ((STRUCT *) ((uint8_t *) &(HASH_ELEM)->list_elem        \
-                     - offsetof (STRUCT, MEMBER.list_elem)))
+#define hash_entry(HASH_ELEM, STRUCT, MEMBER)                                 \
+  ((STRUCT *)((uint8_t *)&(HASH_ELEM)->list_elem                              \
+              - offsetof (STRUCT, MEMBER.list_elem)))
 
 /* Computes and returns the hash value for hash element E, given
    auxiliary data AUX. */
@@ -48,31 +48,30 @@ typedef unsigned hash_hash_func (const struct hash_elem *e, void *aux);
    auxiliary data AUX.  Returns true if A is less than B, or
    false if A is greater than or equal to B. */
 typedef bool hash_less_func (const struct hash_elem *a,
-                             const struct hash_elem *b,
-                             void *aux);
+                             const struct hash_elem *b, void *aux);
 
 /* Performs some operation on hash element E, given auxiliary
    data AUX. */
 typedef void hash_action_func (struct hash_elem *e, void *aux);
 
 /* Hash table. */
-struct hash 
-  {
-    size_t elem_cnt;            /* Number of elements in table. */
-    size_t bucket_cnt;          /* Number of buckets, a power of 2. */
-    struct list *buckets;       /* Array of `bucket_cnt' lists. */
-    hash_hash_func *hash;       /* Hash function. */
-    hash_less_func *less;       /* Comparison function. */
-    void *aux;                  /* Auxiliary data for `hash' and `less'. */
-  };
+struct hash
+{
+  size_t elem_cnt;      /* Number of elements in table. */
+  size_t bucket_cnt;    /* Number of buckets, a power of 2. */
+  struct list *buckets; /* Array of `bucket_cnt' lists. */
+  hash_hash_func *hash; /* Hash function. */
+  hash_less_func *less; /* Comparison function. */
+  void *aux;            /* Auxiliary data for `hash' and `less'. */
+};
 
 /* A hash table iterator. */
-struct hash_iterator 
-  {
-    struct hash *hash;          /* The hash table. */
-    struct list *bucket;        /* Current bucket. */
-    struct hash_elem *elem;     /* Current hash element in current bucket. */
-  };
+struct hash_iterator
+{
+  struct hash *hash;      /* The hash table. */
+  struct list *bucket;    /* Current bucket. */
+  struct hash_elem *elem; /* Current hash element in current bucket. */
+};
 
 /* Basic life cycle. */
 bool hash_init (struct hash *, hash_hash_func *, hash_less_func *, void *aux);
