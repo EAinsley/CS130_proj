@@ -1,6 +1,14 @@
 #ifndef __LIB_DEBUG_H
 #define __LIB_DEBUG_H
 
+#define WITH_LOGGING 0
+
+/* Evaluate an expression and print the value */
+#define LOG_EXPR(EXPR, FMT)                                                   \
+  if (WITH_LOGGING)                                                           \
+    printf ("[LOG %s@(%s:%d)] (%s) evaluates to (" #FMT ")\n", __FUNCTION__,  \
+            __FILE__, __LINE__, #EXPR, (EXPR));
+
 /* GCC lets us add "attributes" to functions, function
    parameters, etc. to indicate their properties.
    See the GCC manual for details. */
