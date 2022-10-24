@@ -1,7 +1,9 @@
 #include "userprog/process.h"
+#include "devices/timer.h"
 #include "filesys/directory.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
+#include "lib/string.h"
 #include "threads/flags.h"
 #include "threads/init.h"
 #include "threads/interrupt.h"
@@ -21,6 +23,11 @@
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
+static void prepare_stack (void **esp, char *name, char *args);
+static void esp_push_align (void **esp_);
+static void esp_push_u32 (void **esp_, uint32_t val);
+static void esp_push_ptr (void **esp_, void *ptr);
+
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
@@ -39,32 +46,53 @@ process_execute (const char *file_name)
   strlcpy (fn_copy, file_name, PGSIZE);
 
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+  tid = thread_create (file_name, PRI_DEFAULT + 10, start_process, fn_copy);
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy);
+  // NOTE: temporarily added for debugging arg-pass tasks
+  thread_yield ();
+  timer_msleep (1000);
   return tid;
 }
 
 /* A thread function that loads a user process and starts it
-   running. */
+   running.
+   1. parse arguments from `args`,
+   2. push them onto the stack that `esp` is pointing to,
+   3. follow X86 call convention
+*/
 static void
 start_process (void *file_name_)
 {
-  char *file_name = file_name_;
+  char *file_name = file_name_, *args;
   struct intr_frame if_;
   bool success;
 
-  /* Initialize interrupt frame and load executable. */
+  // /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
+
+  // find the path to ELF binary file
+  strtok_r (file_name, " ", &args);
   success = load (file_name, &if_.eip, &if_.esp);
+  if (success)
+    {
+      prepare_stack (&if_.esp, file_name, args);
+    }
+
+  // Allocated in `process_execute` and passed into `start_process`.
+  // So we are responsible for deallocation.
+  palloc_free_page (file_name);
+
+  // TODO: notify the caller that this process have been loaded
 
   /* If load failed, quit. */
-  palloc_free_page (file_name);
   if (!success)
-    thread_exit ();
+    {
+      thread_exit ();
+    }
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -85,9 +113,13 @@ start_process (void *file_name_)
 
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
+#include "devices/timer.h"
 int
 process_wait (tid_t child_tid UNUSED)
 {
+  // NOTE: temporarily added for debugging arg-pass tasks
+  thread_yield ();
+  timer_msleep (1000);
   return -1;
 }
 
@@ -460,3 +492,102 @@ install_page (void *upage, void *kpage, bool writable)
   return (pagedir_get_page (t->pagedir, upage) == NULL
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
 }
+
+/* SECTION-BEGIN */
+/* SECTION-BEGIN: prepare stack */
+/* SECTION-BEGIN */
+
+/* push a string onto stack */
+static void
+esp_push_str (void **esp_, char *str)
+{
+  // [p, p+L-1]  [p+L]  [p+L+1 = esp]
+  // cmd string  NULL   last sp
+  char *esp = (char *)*esp_;
+  int len = strlen (str);
+  esp = esp - len - 1;
+  strlcpy (esp, str, len + 1);
+  *esp_ = esp;
+  LOG_EXPR (*esp_, "%p");
+}
+/* push word align onto stack */
+static void
+esp_push_align (void **esp_)
+{
+  char *esp = (char *)*esp_;
+  while ((uint32_t)esp % 4 != 0)
+    {
+      *--esp = 0;
+    }
+  *esp_ = esp;
+  LOG_EXPR (*esp_, "%p");
+}
+
+/* push a uint32 onto stack */
+static void
+esp_push_u32 (void **esp_, uint32_t val)
+{
+  uint32_t *esp = (uint32_t *)*esp_;
+  *--esp = val;
+  *esp_ = esp;
+  LOG_EXPR (*esp_, "%p");
+}
+
+/* push a pointer onto stack */
+static void
+esp_push_ptr (void **esp_, void *ptr)
+{
+  esp_push_u32 (esp_, (uint32_t)ptr);
+}
+
+/* split arguments from command line,
+   populate stakc, follow X86 call convention.
+*/
+static void
+prepare_stack (void **esp, char *name, char *args)
+{
+  ASSERT (*esp != NULL);
+
+  uint32_t argc = 0;
+  char *argv[64];
+
+  // copy the command line onto stack
+  esp_push_str (esp, args);
+  LOG_EXPR ((char *)*esp, "after push arg-str [%s]");
+  // point to the start of command line string
+  args = (char *)*esp;
+
+  esp_push_str (esp, name);
+  LOG_EXPR ((char *)*esp, "after push name-str [%s]");
+  argv[argc++] = (char *)*esp;
+  // word align
+  esp_push_align (esp);
+
+  // split and parse arguments
+  argv[argc++] = strtok_r (args, " ", &args);
+  while (argv[argc - 1] != NULL)
+    {
+      argv[argc++] = strtok_r (NULL, " ", &args);
+    }
+  argc--;
+
+  // push pointers to each argument (argv array)
+  for (int i = argc; i >= 0; i--)
+    {
+      esp_push_ptr (esp, argv[i]);
+      LOG_EXPR (*(char **)*esp, "%s");
+    }
+  // push pointer to the (argv array) onto stack
+  esp_push_ptr (esp, esp);
+  LOG_EXPR (*esp, "argv pointer = %p");
+  // push argc onto stack
+  esp_push_u32 (esp, argc);
+  LOG_EXPR (*(uint32_t *)*esp, "argc = %u");
+  // push return address
+  esp_push_ptr (esp, NULL);
+  LOG_EXPR (*(void **)*esp, "return addr = %p");
+}
+
+/* SECTION-END */
+/* SECTION-END: prepare stack */
+/* SECTION-END */
