@@ -508,7 +508,6 @@ esp_push_str (void **esp_, char *str)
   esp = esp - len - 1;
   strlcpy (esp, str, len + 1);
   *esp_ = esp;
-  LOG_EXPR (*esp_, "%p");
 }
 /* push word align onto stack */
 static void
@@ -520,7 +519,6 @@ esp_push_align (void **esp_)
       *--esp = 0;
     }
   *esp_ = esp;
-  LOG_EXPR (*esp_, "%p");
 }
 
 /* push a uint32 onto stack */
@@ -530,7 +528,6 @@ esp_push_u32 (void **esp_, uint32_t val)
   uint32_t *esp = (uint32_t *)*esp_;
   *--esp = val;
   *esp_ = esp;
-  LOG_EXPR (*esp_, "%p");
 }
 
 /* push a pointer onto stack */
@@ -578,7 +575,7 @@ prepare_stack (void **esp, char *name, char *args)
       LOG_EXPR (*(char **)*esp, "%s");
     }
   // push pointer to the (argv array) onto stack
-  esp_push_ptr (esp, esp);
+  esp_push_ptr (esp, *esp);
   LOG_EXPR (*esp, "argv pointer = %p");
   // push argc onto stack
   esp_push_u32 (esp, argc);
@@ -586,6 +583,8 @@ prepare_stack (void **esp, char *name, char *args)
   // push return address
   esp_push_ptr (esp, NULL);
   LOG_EXPR (*(void **)*esp, "return addr = %p");
+
+  hex_dump (*esp, *esp, PHYS_BASE - *esp, true);
 }
 
 /* SECTION-END */
