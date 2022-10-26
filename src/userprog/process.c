@@ -46,12 +46,10 @@ process_execute (const char *file_name)
   strlcpy (fn_copy, file_name, PGSIZE);
 
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT + 10, start_process, fn_copy);
+  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy);
   // NOTE: temporarily added for debugging arg-pass tasks
-  thread_yield ();
-  timer_msleep (1000);
   return tid;
 }
 
@@ -76,6 +74,8 @@ start_process (void *file_name_)
 
   // find the path to ELF binary file
   strtok_r (file_name, " ", &args);
+  // set correct thread name
+  strlcpy (thread_current ()->name, file_name, strlen (file_name) + 1);
   success = load (file_name, &if_.eip, &if_.esp);
   if (success)
     {
@@ -118,8 +118,7 @@ int
 process_wait (tid_t child_tid UNUSED)
 {
   // NOTE: temporarily added for debugging arg-pass tasks
-  thread_yield ();
-  timer_msleep (1000);
+  timer_msleep (500);
   return -1;
 }
 
@@ -135,6 +134,9 @@ process_exit (void)
   pd = cur->pagedir;
   if (pd != NULL)
     {
+      // print the process exit message
+      // TODO: use correct status code
+      printf ("%s: exit(%d)\n", cur->name, 0);
       /* Correct ordering here is crucial.  We must set
          cur->pagedir to NULL before switching page directories,
          so that a timer interrupt can't switch back to the
@@ -583,8 +585,6 @@ prepare_stack (void **esp, char *name, char *args)
   // push return address
   esp_push_ptr (esp, NULL);
   LOG_EXPR (*(void **)*esp, "return addr = %p");
-
-  hex_dump (*esp, *esp, PHYS_BASE - *esp, true);
 }
 
 /* SECTION-END */
