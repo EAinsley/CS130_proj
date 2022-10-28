@@ -154,6 +154,16 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
 
+  /* See section [3.1.5]
+     a page fault in the kernel merely sets eax to 0xffffffff
+     and copies its former value into eip */
+  if (!user)
+    { // kernel mode
+      f->eip = (void *)f->eax;
+      f->eax = 0xffffffff;
+      return;
+    }
+
   // TODO: user program invalid memory access, terminate the process
   //   if (not_present || (is_kernel_vaddr (fault_addr) && user))
 
