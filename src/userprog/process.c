@@ -34,6 +34,7 @@ struct child_arg
   struct thread *parent;       // pointer to parent process PCB
   struct semaphore sema_start; // up child process started
   char *fn_copy;               // copy of the file name
+  bool load_failed;            // whether load ELF has succeeded
 };
 
 /* Starts a new thread running a user program loaded from
@@ -45,6 +46,7 @@ process_execute (const char *file_name)
 {
   struct thread *cur = thread_current ();
   struct child_arg ch_arg;
+  memset (&ch_arg, 0, sizeof (ch_arg));
   ch_arg.parent = cur;
   sema_init (&ch_arg.sema_start, 0);
 
@@ -67,11 +69,16 @@ process_execute (const char *file_name)
 
   /* Create a new thread to execute FILE_NAME. */
   tid_t tid = thread_create (file_name, PRI_DEFAULT, start_process, &ch_arg);
+  // on thread create error
+  if (tid == TID_ERROR)
+    return -1;
   // make sure that parent process won't exit before child creation finished
   sema_down (&ch_arg.sema_start);
-
   // deallocate the file name copy
   palloc_free_page (ch_arg.fn_copy);
+  // start process function failed to load ELF executable
+  if (ch_arg.load_failed)
+    return -1;
   return tid;
 }
 
@@ -110,6 +117,8 @@ start_process (void *ch_arg_)
   success = load (file_name, &if_.eip, &if_.esp);
   if (success)
     prepare_stack (&if_.esp, file_name, args);
+  else
+    ch_arg->load_failed = true;
 
   // insert child process record pointer for parent
   proc_add_child (ch_arg->parent->proc, cur->proc);
@@ -118,7 +127,11 @@ start_process (void *ch_arg_)
 
   /* If load failed, quit. */
   if (!success)
-    thread_exit ();
+    {
+      // set abnormal exit flag
+      cur->proc->abnormal_exit = true;
+      thread_exit ();
+    }
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -149,8 +162,11 @@ process_wait (tid_t tid)
     return -1;
   // wait for child process exit
   sema_down (&child_proc->sema_exit);
-  int code = child_proc->proc_status;
+  int code = child_proc->proc_status, abnormal = child_proc->abnormal_exit;
   proc_remove_child (tid);
+  // the child process was killed by kernel on exception, return -1
+  if (abnormal)
+    return -1;
   return code;
 }
 

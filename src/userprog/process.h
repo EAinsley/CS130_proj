@@ -12,10 +12,11 @@ typedef int tid_t;
 struct proc_record
 {
   // TODO: exit result, report if killed by kernel
-  tid_t id;                   // thread id of this process
-  int proc_status;            // process status code
-  struct semaphore sema_exit; // up on exit, indicates proc exiting
-  struct proc_record *parent_proc; // children process records
+  tid_t id;           // thread id of this process
+  int proc_status;    // process status code
+  bool abnormal_exit; // set to true if the process does not exit normally
+  struct semaphore sema_exit;            // up on exit, indicates proc exiting
+  struct proc_record *parent_proc;       // children process records
   struct proc_record *children[MAX_CHS]; // children process records
 };
 
