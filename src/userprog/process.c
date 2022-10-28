@@ -206,10 +206,23 @@ process_exit (void)
   // notify parent thread that the children have exitted
   sema_up (&cur->proc->sema_exit);
 
-  // if parent of this process is a kernel thread,
+  enum intr_level old = intr_disable ();
+  // if parent of this process is a kernel thread or have already exited.
   // the process itself has to deallocate the process record
   if (cur->proc->parent_proc == NULL)
-    palloc_free_page ((void *)cur->proc);
+    {
+      for (int i = 0; i < MAX_CHS; i++)
+        {
+          // parent is exiting, children no longer have parent
+          // potential race condition here,
+          // disable interrupt to create a crtical section.
+          struct proc_record *ch_proc = cur->proc->children[i];
+          ch_proc->parent_proc = NULL;
+        }
+      palloc_free_page ((void *)cur->proc);
+      cur->proc = NULL;
+    }
+  intr_set_level (old);
 }
 
 /* Sets up the CPU for running user code in the current
