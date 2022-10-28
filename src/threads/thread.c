@@ -268,6 +268,22 @@ thread_current (void)
   return t;
 }
 
+/* find a process by thread id */
+struct thread *
+thread_find (tid_t id)
+{
+  // possible race condition on list operations, require interrupt turned off
+  ASSERT (intr_get_level () == INTR_OFF);
+  for (struct list_elem *e = list_begin (&all_list); e != list_end (&all_list);
+       e = list_next (e))
+    {
+      struct thread *th = list_entry (e, struct thread, allelem);
+      if (th->tid == id)
+        return th;
+    }
+  return NULL;
+}
+
 /* Returns the running thread's tid. */
 tid_t
 thread_tid (void)
@@ -463,6 +479,10 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *)t + PGSIZE;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
+
+  // for process management
+  t->pagedir = NULL;
+  t->proc = NULL;
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
