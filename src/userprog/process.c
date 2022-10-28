@@ -189,6 +189,25 @@ process_exit (void)
   // print the process exit message
   printf ("%s: exit(%d)\n", cur->name, cur->proc->proc_status);
 
+  enum intr_level old = intr_disable ();
+  // if parent of this process is a kernel thread or have already exited.
+  // the process itself has to deallocate the process record
+  if (cur->proc->parent_proc == NULL)
+    {
+      for (int i = 0; i < MAX_CHS; i++)
+        {
+          // parent is exiting, children no longer have parent
+          // potential race condition here,
+          // disable interrupt to create a crtical section.
+          struct proc_record *ch_proc = cur->proc->children[i];
+          ch_proc->parent_proc = NULL;
+        }
+    }
+  intr_set_level (old);
+
+  // notify parent thread that the children have exitted
+  sema_up (&cur->proc->sema_exit);
+
   /* Destroy the current process's page directory and switch back to the
      kernel-only page directory.
 
@@ -203,26 +222,8 @@ process_exit (void)
   pagedir_activate (NULL);
   pagedir_destroy (pd);
 
-  // notify parent thread that the children have exitted
-  sema_up (&cur->proc->sema_exit);
-
-  enum intr_level old = intr_disable ();
-  // if parent of this process is a kernel thread or have already exited.
-  // the process itself has to deallocate the process record
-  if (cur->proc->parent_proc == NULL)
-    {
-      for (int i = 0; i < MAX_CHS; i++)
-        {
-          // parent is exiting, children no longer have parent
-          // potential race condition here,
-          // disable interrupt to create a crtical section.
-          struct proc_record *ch_proc = cur->proc->children[i];
-          ch_proc->parent_proc = NULL;
-        }
-      palloc_free_page ((void *)cur->proc);
-      cur->proc = NULL;
-    }
-  intr_set_level (old);
+  palloc_free_page ((void *)cur->proc);
+  cur->proc = NULL;
 }
 
 /* Sets up the CPU for running user code in the current
