@@ -112,7 +112,6 @@ start_process (void *ch_arg_)
   cur->proc = (struct proc_record *)palloc_get_page (0);
   ASSERT (cur->proc);
   proc_init (cur->proc);
-
   // load the ELF binary executable file from FS
   success = load (file_name, &if_.eip, &if_.esp);
   if (success)
@@ -763,6 +762,7 @@ proc_current ()
 void
 fd_list_clear (struct list *fl)
 {
+  enum intr_level old_level = intr_disable ();
   while (!list_empty (fl))
     {
       struct list_elem *e = list_pop_front (fl);
@@ -770,6 +770,7 @@ fd_list_clear (struct list *fl)
       file_close (fd_node->f);
       free (fd_node);
     }
+  intr_set_level (old_level);
 }
 
 /* insert a new file, allocating fd */
@@ -816,4 +817,28 @@ fd_list_get_file (struct list *fl, int fd)
         }
     }
   return NULL;
+}
+
+/* remove and close the fd */
+void
+fd_list_remove (struct list *fl, int fd)
+{
+  // Not a valid fd
+  if (fd < 2)
+    {
+      return NULL;
+    }
+
+  for (struct list_elem *e = list_begin (fl); e != list_end (fl);
+       e = list_next (e))
+    {
+      struct fd_node *node = list_entry (e, struct fd_node, fd_elem);
+      if (fd == node->fd)
+        {
+          file_close (node->f);
+          list_remove (e);
+          free (node);
+          return;
+        }
+    }
 }
