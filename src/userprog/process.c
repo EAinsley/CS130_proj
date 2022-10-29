@@ -182,7 +182,11 @@ process_exit (void)
     {
       // deallocate the process record if previously allocated
       if (cur->proc != NULL)
-        palloc_free_page (cur->proc);
+        {
+          // NOTE - Memory freed here!
+          fd_list_clear (&cur->proc->fd_list);
+          palloc_free_page (cur->proc);
+        }
       cur->proc = NULL;
       return;
     }
@@ -679,6 +683,7 @@ proc_init (struct proc_record *proc)
   memset ((void *)proc, 0, sizeof (struct proc_record));
   proc->id = thread_tid ();
   sema_init (&proc->sema_exit, 0);
+  list_init (&proc->fd_list);
 }
 
 /* find the process whose thread id equals to the given id and return the
@@ -737,11 +742,49 @@ proc_remove_child (tid_t id)
     if (chs[i] && chs[i]->id == id)
       {
         // deallocate the process record for child process
+        // NOTE - Meory freed here!
+        fd_list_clear (&chs[i]->fd_list);
         palloc_free_page ((void *)chs[i]);
         chs[i] = NULL;
       }
 }
 
+struct proc_record *
+proc_current ()
+{
+  return thread_current ()->proc;
+}
+
 /* SECTION-END */
 /* SECTION-END: children process management */
 /* SECTION-END */
+
+/* clear the fd_list*/
+void
+fd_list_clear (struct list *fl)
+{
+  while (!list_empty (fl))
+    {
+      struct list_elem *e = list_pop_front (fl);
+      struct fd_node *fd_node = list_entry (e, struct fd_node, fd_elem);
+      file_close (fd_node->f);
+      free (fd_node);
+    }
+}
+
+int
+fd_list_insert (struct list *fl, struct file *f)
+{
+  ASSERT (f != NULL);
+  struct fd_node *new_fd_entry
+      = (struct fd_node *)malloc (sizeof (struct fd_node));
+  new_fd_entry->fd = 2;
+  new_fd_entry->f = f;
+  struct list_elem *e = list_begin (fl);
+  for (; e != list_end (fl)
+         && new_fd_entry->fd == list_entry (e, struct fd_node, fd_elem)->fd;
+       e = list_next (e), new_fd_entry->fd++)
+    ;
+  list_insert (e, &new_fd_entry->fd_elem);
+  return new_fd_entry->fd;
+}
