@@ -128,8 +128,9 @@ start_process (void *ch_arg_)
   /* If load failed, quit. */
   if (!success)
     {
-      // set abnormal exit flag
+      // load error, set abnormal exit flag and status code
       cur->proc->abnormal_exit = true;
+      cur->proc->proc_status = -1;
       thread_exit ();
     }
 
