@@ -182,8 +182,7 @@ process_exit (void)
       // deallocate the process record if previously allocated
       if (cur->proc != NULL)
         {
-          // NOTE - Memory freed here!
-          fd_list_clear (&cur->proc->fd_list);
+
           palloc_free_page (cur->proc);
         }
       cur->proc = NULL;
@@ -223,6 +222,15 @@ process_exit (void)
   pagedir_activate (NULL);
   pagedir_destroy (pd);
 
+  // Allow write and close file.
+  if (cur->proc->image != NULL)
+    {
+      file_allow_write (cur->proc->image);
+      file_close (cur->proc->image);
+    }
+
+  // NOTE - Memory freed here!
+  fd_list_clear (&cur->proc->fd_list);
   // orphran deallocate process record structure
   if (cur->proc->parent_proc == NULL)
     palloc_free_page ((void *)cur->proc);
@@ -341,6 +349,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
       printf ("load: %s: open failed\n", file_name);
       goto done;
     }
+  file_deny_write (file);
 
   /* Read and verify executable header. */
   if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
@@ -422,7 +431,16 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
 done:
   /* We arrive here whether the load is successful or not. */
-  file_close (file);
+  if (success)
+    {
+      proc_current ()->image = file;
+    }
+  else
+    {
+      if (file != NULL)
+        file_allow_write (file);
+      file_close (file);
+    }
   return success;
 }
 
@@ -683,6 +701,7 @@ proc_init (struct proc_record *proc)
   proc->id = thread_tid ();
   sema_init (&proc->sema_exit, 0);
   list_init (&proc->fd_list);
+  proc->image = NULL;
 }
 
 /* find the process whose thread id equals to the given id and return the

@@ -21,6 +21,7 @@ struct proc_record
   struct proc_record *parent_proc;       // children process records
   struct proc_record *children[MAX_CHS]; // children process records
   struct list fd_list; // list used to record file descriptors.
+  struct file *image;  // the image of self.
 };
 
 /* find the process whose thread id equals to the given id and return the
