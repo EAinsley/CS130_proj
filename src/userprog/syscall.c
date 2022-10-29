@@ -238,7 +238,7 @@ SYSCALL_FN (remove) (const char *file)
   check_user_valid_string (file);
   bool result = false;
   ATOMIC_FS_OP { result = filesys_remove (file); }
-  return false;
+  return result;
 }
 static int
 SYSCALL_FN (open) (const char *file)
