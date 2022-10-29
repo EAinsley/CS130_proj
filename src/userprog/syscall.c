@@ -32,8 +32,8 @@ static void SYSCALL_FN (seek) (int fd, unsigned position);
 static unsigned SYSCALL_FN (tell) (int fd);
 static void SYSCALL_FN (close) (int fd);
 
-static void check_user_valid_string (char *);
-static void check_user_valid_ptr (void *);
+static void check_user_valid_string (const char *);
+static void check_user_valid_ptr (const void *);
 struct file *get_current_open_file (int fd);
 
 /* Locks for the filesystem */
@@ -72,7 +72,7 @@ put_user (uint8_t *udst, uint8_t byte)
 static void
 err_exit ()
 {
-  thread_current ()->proc->abnormal_exit = true;
+  thread_current ()->proc->proc_status = PROC_ERROR_EXIT;
   SYSCALL_FN (exit) (-1);
 }
 
@@ -210,7 +210,10 @@ SYSCALL_FN (exit) (int status)
 {
   struct proc_record *proc = thread_current ()->proc;
   if (proc != NULL)
-    proc->proc_status = status;
+    {
+      proc->proc_status = PROC_NORMAL_EXIT;
+      proc->exit_code = status;
+    }
   thread_exit ();
 }
 static tid_t
@@ -259,7 +262,7 @@ SYSCALL_FN (filesize) (int fd)
 {
   struct file *f = fd_list_get_file (&proc_current ()->fd_list, fd);
   if (f == NULL)
-    sys__exit (-1);
+    err_exit ();
   int result = 0;
   ATOMIC_FS_OP { result = file_length (f); }
   return result;
@@ -267,14 +270,20 @@ SYSCALL_FN (filesize) (int fd)
 static int
 SYSCALL_FN (read) (int fd, void *buffer, unsigned size)
 {
-  // Check pointer
-  check_user_valid_ptr (buffer);
+  // Check pointer, head and tail
+  for (uint32_t i = 0; i < size; i++)
+    check_user_valid_ptr (buffer + i);
   // Handle input from console.
   if (fd == 0)
     {
-      char *buf = (char *)buffer;
-      buf[0] = input_getc ();
-      return 1;
+      uint8_t *buf = (uint8_t *)buffer;
+      for (uint32_t i = 0; i < size; ++i)
+        {
+          // error exit on invalid memory write
+          if (!put_user (buf + i, input_getc ()))
+            err_exit ();
+        }
+      return size;
     }
   // Read file
   struct file *fp = get_current_open_file (fd);
@@ -286,8 +295,10 @@ SYSCALL_FN (read) (int fd, void *buffer, unsigned size)
 static int
 SYSCALL_FN (write) (int fd, const void *buffer, unsigned size)
 {
-  // Check pointer
-  check_user_valid_ptr (buffer);
+  // Check pointer, head and tail
+  for (uint32_t i = 0; i < size; i++)
+    check_user_valid_ptr (buffer + i);
+
   // Handle write to console.
   if (fd == 1)
     {
@@ -324,38 +335,35 @@ SYSCALL_FN (close) (int fd)
   fd_list_remove (&proc_current ()->fd_list, fd);
 }
 
-// Check whether the string is valid in user space
+/* Check whether the string is valid in user space */
 static void
-check_user_valid_string (char *str)
+check_user_valid_string (const char *str)
 {
   // Null pointer
   if (str == NULL)
-    sys__exit (-1);
+    err_exit ();
   int i = 0;
   // any char of the string not in the user space.
   do
-    {
-      if (get_user (str + i) == -1)
-        sys__exit (-1);
-    }
+    if (get_user ((void *)str + i) == -1)
+      err_exit ();
   while (str[i++] != 0);
 }
 
-// Check whethter the give pointer is valid in user space.
+/* Check whethter the give pointer is valid in user space.  */
 static void
-check_user_valid_ptr (void *ptr)
+check_user_valid_ptr (const void *ptr)
 {
-  if (ptr == NULL)
-    sys__exit (-1);
-  if (get_user (ptr) == -1)
-    sys__exit (-1);
+  if (ptr == NULL || get_user (ptr) == -1)
+    err_exit ();
 }
 /* Get the file of the current process with fd.
-exit(-1) if the file doesn't exist */
+  exit(-1) if the file doesn't exist */
 struct file *
 get_current_open_file (int fd)
 {
   struct file *fp = fd_list_get_file (&proc_current ()->fd_list, fd);
   if (fp == NULL)
-    sys__exit (-1);
+    err_exit ();
+  return fp;
 }
