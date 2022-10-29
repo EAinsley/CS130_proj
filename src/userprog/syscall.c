@@ -1,5 +1,7 @@
 #include "userprog/syscall.h"
 #include "devices/shutdown.h"
+#include "filesys/file.h"
+#include "filesys/filesys.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
@@ -7,6 +9,9 @@
 #include <syscall-nr.h>
 
 #define SYSCALL_FN(name) sys__##name
+#define ATOMIC_FS_OP                                                          \
+  for (int i = (lock_acquire (&filesys_lock), 0); i < 1;                      \
+       lock_release (&filesys_lock), i++)
 
 /* process exit on error */
 static void err_exit (void);
@@ -25,6 +30,10 @@ static int SYSCALL_FN (write) (int fd, const void *buffer, unsigned size);
 static void SYSCALL_FN (seek) (int fd, unsigned position);
 static unsigned SYSCALL_FN (tell) (int fd);
 static void SYSCALL_FN (close) (int fd);
+static bool is_user_valid_string (char *);
+
+/* Locks for the filesystem */
+struct lock filesys_lock;
 
 /* Reads a byte at user virtual address UADDR.
    UADDR must be below PHYS_BASE.
@@ -180,6 +189,7 @@ void
 syscall_init (void)
 {
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
+  lock_init (&filesys_lock);
 }
 
 /*
@@ -203,6 +213,7 @@ static tid_t
 SYSCALL_FN (exec) (const char *cmd_line UNUSED)
 {
   // TODO: user memory access checking
+  is_user_valid_string (cmd_line);
   return process_execute (cmd_line);
 }
 static int
@@ -223,10 +234,18 @@ SYSCALL_FN (remove) (const char *file UNUSED)
   return false;
 }
 static int
-SYSCALL_FN (open) (const char *file UNUSED)
+SYSCALL_FN (open) (const char *file)
 {
-  // TODO
-  return 0;
+  int fd = -1;
+  // Check if pointer is NULL
+  is_user_valid_string (file);
+  struct file *openedfile;
+  ATOMIC_FS_OP { openedfile = filesys_open (file); }
+  if (openedfile != NULL)
+    {
+      fd = fd_list_insert (&proc_current ()->fd_list, openedfile);
+    }
+  return fd;
 }
 static int
 SYSCALL_FN (filesize) (int fd UNUSED)
@@ -269,4 +288,22 @@ static void
 SYSCALL_FN (close) (int fd UNUSED)
 {
   // TODO
+}
+
+// Check whether the string is valid in user space
+static bool
+is_user_valid_string (char *str)
+{
+  // Null pointer
+  if (str == NULL)
+    sys__exit (-1);
+  int i = 0;
+  // any char of the string not in the user space.
+  do
+    {
+      if (get_user (str + i) == -1)
+        sys__exit (-1);
+    }
+  while (str[i++] != 0);
+  return true;
 }
