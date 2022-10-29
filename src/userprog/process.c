@@ -58,6 +58,7 @@ process_execute (const char *file_name)
       cur->proc = (struct proc_record *)palloc_get_page (0);
       ASSERT (cur->proc);
       proc_init (cur->proc);
+      cur->proc->orphan = true;
     }
 
   /* Make a copy of FILE_NAME.
@@ -127,9 +128,9 @@ start_process (void *ch_arg_)
   /* If load failed, quit. */
   if (!success)
     {
-      // load error, set abnormal exit flag and status code
-      cur->proc->abnormal_exit = true;
-      cur->proc->proc_status = -1;
+      // load error, set error exit flag and status code
+      cur->proc->proc_status = PROC_ERROR_EXIT;
+      cur->proc->exit_code = -1;
       thread_exit ();
     }
 
@@ -152,7 +153,6 @@ start_process (void *ch_arg_)
 
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
-#include "devices/timer.h"
 int
 process_wait (tid_t tid)
 {
@@ -162,10 +162,13 @@ process_wait (tid_t tid)
     return -1;
   // wait for child process exit
   sema_down (&child_proc->sema_exit);
-  int code = child_proc->proc_status, abnormal = child_proc->abnormal_exit;
-  proc_remove_child (tid);
+  int code = child_proc->exit_code, reason = child_proc->proc_status;
+  // deallocate resources in proc_record for the child
+  proc_remove_child (child_proc);
+  fd_list_clear (&child_proc->fd_list);
+  palloc_free_page ((void *)child_proc);
   // the child process was killed by kernel on exception, return -1
-  if (abnormal)
+  if (reason == PROC_ERROR_EXIT)
     return -1;
   return code;
 }
@@ -181,27 +184,27 @@ process_exit (void)
     {
       // deallocate the process record if previously allocated
       if (cur->proc != NULL)
-        {
-
-          palloc_free_page (cur->proc);
-        }
+        palloc_free_page (cur->proc);
       cur->proc = NULL;
       return;
     }
 
   // print the process exit message
-  printf ("%s: exit(%d)\n", cur->name, cur->proc->proc_status);
+  printf ("%s: exit(%d)\n", cur->name, cur->proc->exit_code);
 
+  // possible race: child exit + parent exit interleaved
   enum intr_level old = intr_disable ();
-  // parent of current process is NULL,
-  // after current process exit,
-  // its children are orphans
-  if (cur->proc->parent_proc == NULL)
+  // deallocate the proc record for already exited children,
+  // set running children to be orphan.
+  for (int i = 0; i < MAX_CHS; i++)
     {
-      for (int i = 0; i < MAX_CHS; i++)
+      struct proc_record *ch_proc = cur->proc->children[i];
+      if (ch_proc != NULL)
         {
-          struct proc_record *ch_proc = cur->proc->children[i];
-          ch_proc->parent_proc = NULL;
+          if (ch_proc->proc_status == PROC_RUNNING)
+            ch_proc->orphan = true;
+          else
+            palloc_free_page ((void *)ch_proc);
         }
     }
   intr_set_level (old);
@@ -232,7 +235,7 @@ process_exit (void)
   // NOTE - Memory freed here!
   fd_list_clear (&cur->proc->fd_list);
   // orphran deallocate process record structure
-  if (cur->proc->parent_proc == NULL)
+  if (cur->proc->orphan)
     palloc_free_page ((void *)cur->proc);
   cur->proc = NULL;
 }
@@ -701,6 +704,7 @@ proc_init (struct proc_record *proc)
   proc->id = thread_tid ();
   sema_init (&proc->sema_exit, 0);
   list_init (&proc->fd_list);
+  proc->proc_status = PROC_RUNNING;
   proc->image = NULL;
 }
 
@@ -741,7 +745,10 @@ proc_find_child (tid_t id)
 void
 proc_add_child (struct proc_record *proc, struct proc_record *child)
 {
-  child->parent_proc = proc;
+  if (proc == NULL)
+    return;
+
+  child->orphan = false;
   struct proc_record **chs = proc->children;
   for (int i = 0; i < MAX_CHS; i++)
     if (chs[i] == NULL)
@@ -753,18 +760,16 @@ proc_add_child (struct proc_record *proc, struct proc_record *child)
 }
 /* add a new child process id to the children list of current thread */
 void
-proc_remove_child (tid_t id)
+proc_remove_child (struct proc_record *child_proc)
 {
   struct proc_record **chs = thread_current ()->proc->children;
   for (int i = 0; i < MAX_CHS; i++)
-    if (chs[i] && chs[i]->id == id)
+    if (chs[i] == child_proc)
       {
-        // deallocate the process record for child process
-        // NOTE - Meory freed here!
-        fd_list_clear (&chs[i]->fd_list);
-        palloc_free_page ((void *)chs[i]);
         chs[i] = NULL;
+        return;
       }
+  NOT_REACHED ();
 }
 
 struct proc_record *
@@ -842,10 +847,10 @@ fd_list_get_file (struct list *fl, int fd)
 void
 fd_list_remove (struct list *fl, int fd)
 {
-  // Not a valid fd
+  // invalid fd, cannot cloes stdin/stdout
   if (fd < 2)
     {
-      return NULL;
+      return;
     }
 
   for (struct list_elem *e = list_begin (fl); e != list_end (fl);

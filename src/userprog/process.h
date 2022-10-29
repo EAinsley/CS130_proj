@@ -11,14 +11,21 @@ typedef int tid_t;
 
 #define MAX_CHS 64 // maximum child processes of a process
 
+enum proc_status
+{
+  PROC_RUNNING,
+  PROC_NORMAL_EXIT,
+  PROC_ERROR_EXIT
+};
+
 /* the process control block except the pagedir */
 struct proc_record
 {
-  tid_t id;           // thread id of this process
-  int proc_status;    // process status code
-  bool abnormal_exit; // set to true if the process does not exit normally
+  tid_t id;                              // thread id of this process
+  int exit_code;                         // process status code
+  enum proc_status proc_status;          // the reason for process termination
   struct semaphore sema_exit;            // up on exit, indicates proc exiting
-  struct proc_record *parent_proc;       // children process records
+  bool orphan;                           // whether the parent process exists
   struct proc_record *children[MAX_CHS]; // children process records
   struct list fd_list; // list used to record file descriptors.
   struct file *image;  // the image of self.
@@ -36,7 +43,7 @@ struct proc_record *proc_current (void);
 /* add a child process into the children filed of parent */
 void proc_add_child (struct proc_record *proc, struct proc_record *child);
 /* add a new child process id to the children list of current thread */
-void proc_remove_child (tid_t id);
+void proc_remove_child (struct proc_record *child_proc);
 
 // The struct to record the fd and file mapping.
 struct fd_node

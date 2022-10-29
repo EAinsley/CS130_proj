@@ -68,15 +68,22 @@ exception_print_stats (void)
   printf ("Exception: %lld page faults\n", page_fault_cnt);
 }
 
+static void
+proc_err_exit (int code)
+{
+  struct proc_record *proc = thread_current ()->proc;
+  if (proc)
+    {
+      proc->exit_code = code;
+      proc->proc_status = PROC_ERROR_EXIT;
+    }
+  thread_exit ();
+}
+
 /* Handler for an exception (probably) caused by a user process. */
 static void
 kill (struct intr_frame *f)
 {
-  struct proc_record *proc = thread_current ()->proc;
-  // for user program process, set abnormal exit flag on kill
-  if (proc)
-    proc->abnormal_exit = true;
-
   /* This interrupt is one (probably) caused by a user process.
      For example, the process might have tried to access unmapped
      virtual memory (a page fault).  For now, we simply kill the
@@ -95,12 +102,7 @@ kill (struct intr_frame *f)
       printf ("%s: dying due to interrupt %#04x (%s).\n", thread_name (),
               f->vec_no, intr_name (f->vec_no));
       intr_dump_frame (f);
-      if (proc)
-        {
-          proc->proc_status = -1;
-          proc->abnormal_exit = true;
-        }
-      thread_exit ();
+      proc_err_exit (-1);
 
     case SEL_KCSEG:
       /* Kernel's code segment, which indicates a kernel bug.
@@ -115,12 +117,7 @@ kill (struct intr_frame *f)
          kernel. */
       printf ("Interrupt %#04x (%s) in unknown segment %04x\n", f->vec_no,
               intr_name (f->vec_no), f->cs);
-      if (proc)
-        {
-          proc->proc_status = -1;
-          proc->abnormal_exit = true;
-        }
-      thread_exit ();
+      proc_err_exit (-1);
     }
 }
 
