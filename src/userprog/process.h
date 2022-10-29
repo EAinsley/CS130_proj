@@ -49,6 +49,8 @@ struct fd_node
 void fd_list_clear (struct list *fdlist);
 /* Insert new files and get proper fd*/
 int fd_list_insert (struct list *fl, struct file *f);
+/* Get the file with specified fd*/
+struct file *fd_list_get_file (struct list *ls, int fd);
 
 tid_t process_execute (const char *file_name);
 int process_wait (tid_t);

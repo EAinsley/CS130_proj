@@ -772,14 +772,17 @@ fd_list_clear (struct list *fl)
     }
 }
 
+/* insert a new file, allocating fd */
 int
 fd_list_insert (struct list *fl, struct file *f)
 {
   ASSERT (f != NULL);
+  // Create fd_node to store file
   struct fd_node *new_fd_entry
       = (struct fd_node *)malloc (sizeof (struct fd_node));
   new_fd_entry->fd = 2;
   new_fd_entry->f = f;
+  // Search for the first unallocated fd number.
   struct list_elem *e = list_begin (fl);
   for (; e != list_end (fl)
          && new_fd_entry->fd == list_entry (e, struct fd_node, fd_elem)->fd;
@@ -787,4 +790,30 @@ fd_list_insert (struct list *fl, struct file *f)
     ;
   list_insert (e, &new_fd_entry->fd_elem);
   return new_fd_entry->fd;
+}
+
+/* Get the fd_node associated with the fd.
+  reutrn NULL if the given fd doesn't exist.
+*/
+struct file *
+fd_list_get_file (struct list *fl, int fd)
+{
+  if (fd < 2)
+    {
+      return NULL;
+    }
+  for (struct list_elem *e = list_begin (fl); e != list_end (fl);
+       e = list_next (e))
+    {
+      struct fd_node *node = list_entry (e, struct fd_node, fd_elem);
+      if (fd == node->fd)
+        {
+          return node->f;
+        }
+      else if (fd > node->fd)
+        {
+          return NULL;
+        }
+    }
+  return NULL;
 }
