@@ -2,6 +2,7 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "userprog/gdt.h"
+#include "userprog/process.h"
 #include <inttypes.h>
 #include <stdio.h>
 
@@ -71,6 +72,11 @@ exception_print_stats (void)
 static void
 kill (struct intr_frame *f)
 {
+  struct proc_record *proc = thread_current ()->proc;
+  // for user program process, set abnormal exit flag on kill
+  if (proc)
+    proc->abnormal_exit = true;
+
   /* This interrupt is one (probably) caused by a user process.
      For example, the process might have tried to access unmapped
      virtual memory (a page fault).  For now, we simply kill the
@@ -89,6 +95,11 @@ kill (struct intr_frame *f)
       printf ("%s: dying due to interrupt %#04x (%s).\n", thread_name (),
               f->vec_no, intr_name (f->vec_no));
       intr_dump_frame (f);
+      if (proc)
+        {
+          proc->proc_status = -1;
+          proc->abnormal_exit = true;
+        }
       thread_exit ();
 
     case SEL_KCSEG:
@@ -104,6 +115,11 @@ kill (struct intr_frame *f)
          kernel. */
       printf ("Interrupt %#04x (%s) in unknown segment %04x\n", f->vec_no,
               intr_name (f->vec_no), f->cs);
+      if (proc)
+        {
+          proc->proc_status = -1;
+          proc->abnormal_exit = true;
+        }
       thread_exit ();
     }
 }
@@ -147,6 +163,19 @@ page_fault (struct intr_frame *f)
   not_present = (f->error_code & PF_P) == 0;
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
+
+  /* See section [3.1.5]
+     a page fault in the kernel merely sets eax to 0xffffffff
+     and copies its former value into eip */
+  if (!user)
+    { // kernel mode
+      f->eip = (void *)f->eax;
+      f->eax = 0xffffffff;
+      return;
+    }
+
+  // TODO: user program invalid memory access, terminate the process
+  //   if (not_present || (is_kernel_vaddr (fault_addr) && user))
 
   /* To implement virtual memory, delete the rest of the function
      body, and replace it with code that brings in the page to

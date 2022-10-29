@@ -1,7 +1,9 @@
 #include "userprog/process.h"
+#include "devices/timer.h"
 #include "filesys/directory.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
+#include "lib/string.h"
 #include "threads/flags.h"
 #include "threads/init.h"
 #include "threads/interrupt.h"
@@ -21,6 +23,20 @@
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
+static void prepare_stack (void **esp, char *name, char *args);
+static void esp_push_align (void **esp_);
+static void esp_push_u32 (void **esp_, uint32_t val);
+static void esp_push_ptr (void **esp_, void *ptr);
+
+/* arguments for the start_process thread function*/
+struct child_arg
+{
+  struct thread *parent;       // pointer to parent process PCB
+  struct semaphore sema_start; // up child process started
+  char *fn_copy;               // copy of the file name
+  bool load_failed;            // whether load ELF has succeeded
+};
+
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
@@ -28,43 +44,94 @@ static bool load (const char *cmdline, void (**eip) (void), void **esp);
 tid_t
 process_execute (const char *file_name)
 {
-  char *fn_copy;
-  tid_t tid;
+  struct thread *cur = thread_current ();
+  struct child_arg ch_arg;
+  memset (&ch_arg, 0, sizeof (ch_arg));
+  ch_arg.parent = cur;
+  sema_init (&ch_arg.sema_start, 0);
+
+  // a kernel thread is trying to spawn a user program process
+  // create the process record data structure for this thread
+  // remember to deallocate on this kernel thread exit
+  if (cur->proc == NULL)
+    {
+      cur->proc = (struct proc_record *)palloc_get_page (0);
+      ASSERT (cur->proc);
+      proc_init (cur->proc);
+    }
 
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
-  fn_copy = palloc_get_page (0);
-  if (fn_copy == NULL)
+  ch_arg.fn_copy = palloc_get_page (0);
+  if (ch_arg.fn_copy == NULL)
     return TID_ERROR;
-  strlcpy (fn_copy, file_name, PGSIZE);
+  strlcpy (ch_arg.fn_copy, file_name, PGSIZE);
 
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+  tid_t tid = thread_create (file_name, PRI_DEFAULT, start_process, &ch_arg);
+  // on thread create error
   if (tid == TID_ERROR)
-    palloc_free_page (fn_copy);
+    return -1;
+  // make sure that parent process won't exit before child creation finished
+  sema_down (&ch_arg.sema_start);
+  // deallocate the file name copy
+  palloc_free_page (ch_arg.fn_copy);
+  // start process function failed to load ELF executable
+  if (ch_arg.load_failed)
+    return -1;
   return tid;
 }
 
 /* A thread function that loads a user process and starts it
-   running. */
+   running.
+   1. parse arguments from `args`,
+   2. push them onto the stack that `esp` is pointing to,
+   3. follow X86 call convention
+*/
 static void
-start_process (void *file_name_)
+start_process (void *ch_arg_)
 {
-  char *file_name = file_name_;
+  struct child_arg *ch_arg = (struct child_arg *)ch_arg_;
+  char *file_name = ch_arg->fn_copy, *args = NULL;
   struct intr_frame if_;
   bool success;
+  struct thread *cur = thread_current ();
 
-  /* Initialize interrupt frame and load executable. */
+  // /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
+
+  // find the path to ELF binary file
+  strtok_r (file_name, " ", &args);
+  // set correct thread name
+  strlcpy (cur->name, file_name, strlen (file_name) + 1);
+
+  // create the process control data structures
+  cur->proc = (struct proc_record *)palloc_get_page (0);
+  ASSERT (cur->proc);
+  proc_init (cur->proc);
+  // load the ELF binary executable file from FS
   success = load (file_name, &if_.eip, &if_.esp);
+  if (success)
+    prepare_stack (&if_.esp, file_name, args);
+  else
+    ch_arg->load_failed = true;
+
+  // insert child process record pointer for parent
+  proc_add_child (ch_arg->parent->proc, cur->proc);
+  // notify the parent that the child process is ready
+  sema_up (&ch_arg->sema_start);
 
   /* If load failed, quit. */
-  palloc_free_page (file_name);
   if (!success)
-    thread_exit ();
+    {
+      // load error, set abnormal exit flag and status code
+      cur->proc->abnormal_exit = true;
+      cur->proc->proc_status = -1;
+      thread_exit ();
+    }
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -85,10 +152,22 @@ start_process (void *file_name_)
 
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
+#include "devices/timer.h"
 int
-process_wait (tid_t child_tid UNUSED)
+process_wait (tid_t tid)
 {
-  return -1;
+  struct proc_record *child_proc = proc_find_child (tid);
+  // not a children or already removed from children list
+  if (child_proc == NULL)
+    return -1;
+  // wait for child process exit
+  sema_down (&child_proc->sema_exit);
+  int code = child_proc->proc_status, abnormal = child_proc->abnormal_exit;
+  proc_remove_child (tid);
+  // the child process was killed by kernel on exception, return -1
+  if (abnormal)
+    return -1;
+  return code;
 }
 
 /* Free the current process's resources. */
@@ -96,24 +175,66 @@ void
 process_exit (void)
 {
   struct thread *cur = thread_current ();
-  uint32_t *pd;
 
-  /* Destroy the current process's page directory and switch back
-     to the kernel-only page directory. */
-  pd = cur->pagedir;
-  if (pd != NULL)
+  // not a userprog process
+  if (cur->pagedir == NULL)
     {
-      /* Correct ordering here is crucial.  We must set
-         cur->pagedir to NULL before switching page directories,
-         so that a timer interrupt can't switch back to the
-         process page directory.  We must activate the base page
-         directory before destroying the process's page
-         directory, or our active page directory will be one
-         that's been freed (and cleared). */
-      cur->pagedir = NULL;
-      pagedir_activate (NULL);
-      pagedir_destroy (pd);
+      // deallocate the process record if previously allocated
+      if (cur->proc != NULL)
+        {
+
+          palloc_free_page (cur->proc);
+        }
+      cur->proc = NULL;
+      return;
     }
+
+  // print the process exit message
+  printf ("%s: exit(%d)\n", cur->name, cur->proc->proc_status);
+
+  enum intr_level old = intr_disable ();
+  // parent of current process is NULL,
+  // after current process exit,
+  // its children are orphans
+  if (cur->proc->parent_proc == NULL)
+    {
+      for (int i = 0; i < MAX_CHS; i++)
+        {
+          struct proc_record *ch_proc = cur->proc->children[i];
+          ch_proc->parent_proc = NULL;
+        }
+    }
+  intr_set_level (old);
+
+  // notify parent thread that the children have exitted
+  sema_up (&cur->proc->sema_exit);
+  /* Destroy the current process's page directory and switch back to the
+     kernel-only page directory.
+
+     Correct ordering here is crucial.  We must set cur->pagedir to NULL before
+     switching page directories, so that a timer interrupt can't switch back to
+     the process page directory.  We must activate the base page directory
+     before destroying the process's page directory, or our active page
+     directory will be one that's been freed (and cleared).
+     */
+  uint32_t *pd = cur->pagedir;
+  cur->pagedir = NULL;
+  pagedir_activate (NULL);
+  pagedir_destroy (pd);
+
+  // Allow write and close file.
+  if (cur->proc->image != NULL)
+    {
+      file_allow_write (cur->proc->image);
+      file_close (cur->proc->image);
+    }
+
+  // NOTE - Memory freed here!
+  fd_list_clear (&cur->proc->fd_list);
+  // orphran deallocate process record structure
+  if (cur->proc->parent_proc == NULL)
+    palloc_free_page ((void *)cur->proc);
+  cur->proc = NULL;
 }
 
 /* Sets up the CPU for running user code in the current
@@ -228,6 +349,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
       printf ("load: %s: open failed\n", file_name);
       goto done;
     }
+  file_deny_write (file);
 
   /* Read and verify executable header. */
   if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
@@ -309,7 +431,16 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
 done:
   /* We arrive here whether the load is successful or not. */
-  file_close (file);
+  if (success)
+    {
+      proc_current ()->image = file;
+    }
+  else
+    {
+      if (file != NULL)
+        file_allow_write (file);
+      file_close (file);
+    }
   return success;
 }
 
@@ -459,4 +590,274 @@ install_page (void *upage, void *kpage, bool writable)
      address, then map our page there. */
   return (pagedir_get_page (t->pagedir, upage) == NULL
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
+}
+
+/* SECTION-BEGIN */
+/* SECTION-BEGIN: prepare stack */
+/* SECTION-BEGIN */
+
+/* push a string onto stack */
+static void
+esp_push_str (void **esp_, char *str)
+{
+  // [p, p+L-1]  [p+L]  [p+L+1 = esp]
+  // cmd string  NULL   last sp
+  char *esp = (char *)*esp_;
+  int len = strlen (str);
+  esp = esp - len - 1;
+  strlcpy (esp, str, len + 1);
+  *esp_ = esp;
+}
+/* push word align onto stack */
+static void
+esp_push_align (void **esp_)
+{
+  char *esp = (char *)*esp_;
+  while ((uint32_t)esp % 4 != 0)
+    {
+      *--esp = 0;
+    }
+  *esp_ = esp;
+}
+
+/* push a uint32 onto stack */
+static void
+esp_push_u32 (void **esp_, uint32_t val)
+{
+  uint32_t *esp = (uint32_t *)*esp_;
+  *--esp = val;
+  *esp_ = esp;
+}
+
+/* push a pointer onto stack */
+static void
+esp_push_ptr (void **esp_, void *ptr)
+{
+  esp_push_u32 (esp_, (uint32_t)ptr);
+}
+
+/* split arguments from command line,
+   populate stakc, follow X86 call convention.
+*/
+static void
+prepare_stack (void **esp, char *name, char *args)
+{
+  ASSERT (*esp != NULL);
+
+  uint32_t argc = 0;
+  char *argv[64];
+
+  // copy the command line onto stack
+  esp_push_str (esp, args);
+  LOG_EXPR ((char *)*esp, "after push arg-str [%s]");
+  // point to the start of command line string
+  args = (char *)*esp;
+
+  esp_push_str (esp, name);
+  LOG_EXPR ((char *)*esp, "after push name-str [%s]");
+  argv[argc++] = (char *)*esp;
+  // word align
+  esp_push_align (esp);
+
+  // split and parse arguments
+  argv[argc++] = strtok_r (args, " ", &args);
+  while (argv[argc - 1] != NULL)
+    {
+      argv[argc++] = strtok_r (NULL, " ", &args);
+    }
+  argc--;
+
+  // push pointers to each argument (argv array)
+  for (int i = argc; i >= 0; i--)
+    {
+      esp_push_ptr (esp, argv[i]);
+      LOG_EXPR (*(char **)*esp, "%s");
+    }
+  // push pointer to the (argv array) onto stack
+  esp_push_ptr (esp, *esp);
+  LOG_EXPR (*esp, "argv pointer = %p");
+  // push argc onto stack
+  esp_push_u32 (esp, argc);
+  LOG_EXPR (*(uint32_t *)*esp, "argc = %u");
+  // push return address
+  esp_push_ptr (esp, NULL);
+  LOG_EXPR (*(void **)*esp, "return addr = %p");
+}
+
+/* SECTION-END */
+/* SECTION-END: prepare stack */
+/* SECTION-END */
+
+/* SECTION-BEGIN */
+/* SECTION-BEGIN: children process management */
+/* SECTION-BEGIN */
+
+/* initialize a process record */
+void
+proc_init (struct proc_record *proc)
+{
+  ASSERT (proc != NULL);
+  memset ((void *)proc, 0, sizeof (struct proc_record));
+  proc->id = thread_tid ();
+  sema_init (&proc->sema_exit, 0);
+  list_init (&proc->fd_list);
+  proc->image = NULL;
+}
+
+/* find the process whose thread id equals to the given id and return the
+ * process record */
+struct proc_record *
+proc_find (tid_t id)
+{
+  struct proc_record *proc = NULL;
+
+  // possible race: searching the list, updating the list
+  // disable interrupt to have exclusive access to the thread list
+  enum intr_level old = intr_disable ();
+  struct thread *th = thread_find (id);
+  if (th)
+    proc = th->proc;
+  intr_set_level (old);
+
+  return proc;
+}
+
+/* Find a child process with the given id.
+   Return the process structure pointer if found.
+   Otherwise, return NULL
+ */
+struct proc_record *
+proc_find_child (tid_t id)
+{
+  if (thread_current ()->proc == NULL)
+    return NULL;
+  struct proc_record **chs = thread_current ()->proc->children;
+  for (int i = 0; i < MAX_CHS; i++)
+    if (chs[i] && chs[i]->id == id)
+      return chs[i];
+  return NULL;
+}
+/* add a child process into the children filed of parent */
+void
+proc_add_child (struct proc_record *proc, struct proc_record *child)
+{
+  child->parent_proc = proc;
+  struct proc_record **chs = proc->children;
+  for (int i = 0; i < MAX_CHS; i++)
+    if (chs[i] == NULL)
+      {
+        chs[i] = child;
+        return;
+      }
+  NOT_REACHED ();
+}
+/* add a new child process id to the children list of current thread */
+void
+proc_remove_child (tid_t id)
+{
+  struct proc_record **chs = thread_current ()->proc->children;
+  for (int i = 0; i < MAX_CHS; i++)
+    if (chs[i] && chs[i]->id == id)
+      {
+        // deallocate the process record for child process
+        // NOTE - Meory freed here!
+        fd_list_clear (&chs[i]->fd_list);
+        palloc_free_page ((void *)chs[i]);
+        chs[i] = NULL;
+      }
+}
+
+struct proc_record *
+proc_current ()
+{
+  return thread_current ()->proc;
+}
+
+/* SECTION-END */
+/* SECTION-END: children process management */
+/* SECTION-END */
+
+/* clear the fd_list*/
+void
+fd_list_clear (struct list *fl)
+{
+  enum intr_level old_level = intr_disable ();
+  while (!list_empty (fl))
+    {
+      struct list_elem *e = list_pop_front (fl);
+      struct fd_node *fd_node = list_entry (e, struct fd_node, fd_elem);
+      file_close (fd_node->f);
+      free (fd_node);
+    }
+  intr_set_level (old_level);
+}
+
+/* insert a new file, allocating fd */
+int
+fd_list_insert (struct list *fl, struct file *f)
+{
+  ASSERT (f != NULL);
+  // Create fd_node to store file
+  struct fd_node *new_fd_entry
+      = (struct fd_node *)malloc (sizeof (struct fd_node));
+  new_fd_entry->fd = 2;
+  new_fd_entry->f = f;
+  // Search for the first unallocated fd number.
+  struct list_elem *e = list_begin (fl);
+  for (; e != list_end (fl)
+         && new_fd_entry->fd == list_entry (e, struct fd_node, fd_elem)->fd;
+       e = list_next (e), new_fd_entry->fd++)
+    ;
+  list_insert (e, &new_fd_entry->fd_elem);
+  return new_fd_entry->fd;
+}
+
+/* Get the fd_node associated with the fd.
+  reutrn NULL if the given fd doesn't exist.
+*/
+struct file *
+fd_list_get_file (struct list *fl, int fd)
+{
+  if (fd < 2)
+    {
+      return NULL;
+    }
+  for (struct list_elem *e = list_begin (fl); e != list_end (fl);
+       e = list_next (e))
+    {
+      struct fd_node *node = list_entry (e, struct fd_node, fd_elem);
+      if (fd == node->fd)
+        {
+          return node->f;
+        }
+      else if (fd > node->fd)
+        {
+          return NULL;
+        }
+    }
+  return NULL;
+}
+
+/* remove and close the fd */
+void
+fd_list_remove (struct list *fl, int fd)
+{
+  // Not a valid fd
+  if (fd < 2)
+    {
+      return NULL;
+    }
+
+  for (struct list_elem *e = list_begin (fl); e != list_end (fl);
+       e = list_next (e))
+    {
+      struct fd_node *node = list_entry (e, struct fd_node, fd_elem);
+      if (fd == node->fd)
+        {
+          file_close (node->f);
+          list_remove (e);
+          free (node);
+          return;
+        }
+    }
 }
