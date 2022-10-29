@@ -190,15 +190,13 @@ process_exit (void)
   printf ("%s: exit(%d)\n", cur->name, cur->proc->proc_status);
 
   enum intr_level old = intr_disable ();
-  // if parent of this process is a kernel thread or have already exited.
-  // the process itself has to deallocate the process record
+  // parent of current process is NULL,
+  // after current process exit,
+  // its children are orphans
   if (cur->proc->parent_proc == NULL)
     {
       for (int i = 0; i < MAX_CHS; i++)
         {
-          // parent is exiting, children no longer have parent
-          // potential race condition here,
-          // disable interrupt to create a crtical section.
           struct proc_record *ch_proc = cur->proc->children[i];
           ch_proc->parent_proc = NULL;
         }
@@ -207,7 +205,6 @@ process_exit (void)
 
   // notify parent thread that the children have exitted
   sema_up (&cur->proc->sema_exit);
-
   /* Destroy the current process's page directory and switch back to the
      kernel-only page directory.
 
@@ -222,7 +219,9 @@ process_exit (void)
   pagedir_activate (NULL);
   pagedir_destroy (pd);
 
-  palloc_free_page ((void *)cur->proc);
+  // orphran deallocate process record structure
+  if (cur->proc->parent_proc == NULL)
+    palloc_free_page ((void *)cur->proc);
   cur->proc = NULL;
 }
 
