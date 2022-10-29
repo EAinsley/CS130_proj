@@ -34,6 +34,7 @@ static void SYSCALL_FN (close) (int fd);
 
 static void check_user_valid_string (char *);
 static void check_user_valid_ptr (void *);
+struct file *get_current_open_file (int fd);
 
 /* Locks for the filesystem */
 struct lock filesys_lock;
@@ -213,9 +214,8 @@ SYSCALL_FN (exit) (int status)
   thread_exit ();
 }
 static tid_t
-SYSCALL_FN (exec) (const char *cmd_line UNUSED)
+SYSCALL_FN (exec) (const char *cmd_line)
 {
-  // TODO: user memory access checking
   check_user_valid_string (cmd_line);
   return process_execute (cmd_line);
 }
@@ -236,7 +236,7 @@ static bool
 SYSCALL_FN (remove) (const char *file)
 {
   check_user_valid_string (file);
-  bool result;
+  bool result = false;
   ATOMIC_FS_OP { result = filesys_remove (file); }
   return false;
 }
@@ -246,11 +246,11 @@ SYSCALL_FN (open) (const char *file)
   int fd = -1;
   // Check if pointer is NULL
   check_user_valid_string (file);
-  struct file *openedfile;
-  ATOMIC_FS_OP { openedfile = filesys_open (file); }
-  if (openedfile != NULL)
+  struct file *fp = NULL;
+  ATOMIC_FS_OP { fp = filesys_open (file); }
+  if (fp != NULL)
     {
-      fd = fd_list_insert (&proc_current ()->fd_list, openedfile);
+      fd = fd_list_insert (&proc_current ()->fd_list, fp);
     }
   return fd;
 }
@@ -260,14 +260,16 @@ SYSCALL_FN (filesize) (int fd)
   struct file *f = fd_list_get_file (&proc_current ()->fd_list, fd);
   if (f == NULL)
     sys__exit (-1);
-  return file_length (f);
+  int result = 0;
+  ATOMIC_FS_OP { result = file_length (f); }
+  return result;
 }
 static int
 SYSCALL_FN (read) (int fd, void *buffer, unsigned size)
 {
   // Check pointer
   check_user_valid_ptr (buffer);
-  // Handle input from terminal
+  // Handle input from console.
   if (fd == 0)
     {
       char *buf = (char *)buffer;
@@ -275,42 +277,51 @@ SYSCALL_FN (read) (int fd, void *buffer, unsigned size)
       return 1;
     }
   // Read file
-  struct file *fp = fd_list_get_file (&proc_current ()->fd_list, fd);
-  // Check for file open
-  if (fp == NULL)
-    return -1;
-  return file_read (fp, buffer, size);
+  struct file *fp = get_current_open_file (fd);
+  int result = 0;
+  ATOMIC_FS_OP { result = file_read (fp, buffer, size); }
+  return result;
 }
 
 static int
 SYSCALL_FN (write) (int fd, const void *buffer, unsigned size)
 {
-  const char *buf = (const char *)buffer;
-  // temporarily added for arg-pass
+  // Check pointer
+  check_user_valid_ptr (buffer);
+  // Handle write to console.
   if (fd == 1)
     {
-      for (unsigned i = 0; i < size; i++)
-        putchar (buf[i]);
-      return 0;
+      putbuf (buffer, size);
+      return size;
     }
-  // TODO
-  return 0;
+  // Read file
+  struct file *fp = get_current_open_file (fd);
+  // Write file.
+  int result = 0;
+  ATOMIC_FS_OP { result = file_write (fp, buffer, size); }
+  return result;
 }
 static void
-SYSCALL_FN (seek) (int fd UNUSED, unsigned position UNUSED)
+SYSCALL_FN (seek) (int fd, unsigned position)
 {
-  // TODO
+  // Get file
+  struct file *fp = get_current_open_file (fd);
+  // Seek file
+  ATOMIC_FS_OP { file_seek (fp, position); }
 }
 static unsigned
-SYSCALL_FN (tell) (int fd UNUSED)
+SYSCALL_FN (tell) (int fd)
 {
-  // TODO
-  return 0;
+  // Get file
+  struct file *fp = get_current_open_file (fd);
+  unsigned pos = 0;
+  ATOMIC_FS_OP { pos = file_tell (fp); }
+  return pos;
 }
 static void
-SYSCALL_FN (close) (int fd UNUSED)
+SYSCALL_FN (close) (int fd)
 {
-  // TODO
+  fd_list_remove (&proc_current ()->fd_list, fd);
 }
 
 // Check whether the string is valid in user space
@@ -337,5 +348,14 @@ check_user_valid_ptr (void *ptr)
   if (ptr == NULL)
     sys__exit (-1);
   if (get_user (ptr) == -1)
+    sys__exit (-1);
+}
+/* Get the file of the current process with fd.
+exit(-1) if the file doesn't exist */
+struct file *
+get_current_open_file (int fd)
+{
+  struct file *fp = fd_list_get_file (&proc_current ()->fd_list, fd);
+  if (fp == NULL)
     sys__exit (-1);
 }
