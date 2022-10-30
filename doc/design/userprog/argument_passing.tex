@@ -1,0 +1,34 @@
+
+\section{ARGUMENT PASSING}
+
+\begin{aspect}{DATA STRUCTURES}
+	\begin{qc}
+		A1: Copy here the declaration of eachnew or changed
+		`struct' or `struct' member, global or static variable, `typedef', or enumeration.
+		Identify the purpose of each in 25 words or less.
+	\end{qc}
+	\TODO{paste and explain new or changes to code}
+\end{aspect}
+
+\begin{aspect}{ALGORITHMS}
+	\begin{qc}
+		A2: Briefly describe how you implemented argument parsing.
+		How do you arrange for the elements of \lstinline{argv[]} to be in the right order?
+		How do you avoid overflowing the stack page?
+	\end{qc}
+	\TODO{how to arrange arguments on stack according to X86 calling convention}
+\end{aspect}
+
+\begin{aspect}{RATIONALE}
+	\begin{qc}
+		A3: Why does Pintos implement \lstinline{strtok_r()} but not \lstinline{strtok()}?
+	\end{qc}
+	\TODO{\lstinline{strtok} race condition}
+
+	\begin{qc}
+		A4: In Pintos, the kernel separates commands into a executable name and arguments.
+		In Unix-like systems, the shell does this separation.
+		Identify at least two advantages of the Unix approach.
+	\end{qc}
+	\TODO{advantages of having a shell for command line arguments handling}
+\end{aspect}

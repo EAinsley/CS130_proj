@@ -1,0 +1,88 @@
+\section{SYSTEM CALLS}
+\begin{aspect}{DATA STRUCTURES}
+	\begin{qc}
+		B1: Copy here the declaration of each new or changed
+		`struct' or `struct' member, global or static variable, `typedef', or enumeration.
+		Identify the purpose of each in 25 words or less.
+	\end{qc}
+	\TODO{code change for syscall}
+
+	\begin{qc}
+		B2: Describe how file descriptors are associated with open files.
+		Are file descriptors unique within the entire OS or just within a single process?
+	\end{qc}
+	\TODO{file descriptor ownership}
+\end{aspect}
+
+\begin{aspect}{ALGORITHMS}
+	\begin{qc}
+		B3: Describe your code for reading and writing user data from the kernel.
+	\end{qc}
+	\TODO{read/write syscall implementation}
+
+	\begin{qc}
+		B4: Suppose a system call causes a full page (4,096 bytes) of data to be copied from user space into the kernel.
+		What is the least and the greatest possible number of inspections of the page table (e.g. calls to \lstinline{pagedir_get_page()}) that might result?
+		What about for a system call that only copies 2 bytes of data?
+		Is there room for improvement in these numbers, and how much?
+	\end{qc}
+	\TODO{reducing page table lookup}
+
+	\begin{qc}
+		B5: Briefly describe your implementation of the \lstinline{wait} system call
+		and how it interacts with process termination.
+	\end{qc}
+	\TODO{wait syscall impl}
+
+	\begin{qc}
+		B6: Any access to user program memory at a user-specified address can fail due to a bad pointer value.
+		Such accesses must cause the process to be terminated.
+		System calls are fraught with such accesses,
+		e.g. a \lstinline{write} system call requires reading the system call number from the user stack,
+		then each of the call's three arguments, then an arbitrary amount of user memory, and any of these can fail at any point.
+		This poses a design and error-handling problem: how do you best avoid obscuring the primary function of code in a morass of error-handling?
+		Furthermore, when an error is detected, how do you ensure that all temporarily allocated resources (locks, buffers, etc.) are freed?
+		In a few paragraphs, describe the strategy or strategies you adopted for managing these issues.
+		Give an example.
+	\end{qc}
+	\TODO{syscall invalid memory handling}
+\end{aspect}
+
+\begin{aspect}{SYNCHRONIZATION}
+	\begin{qc}
+		B7: The \lstinline{exec} system call returns \lstinline{-1}
+		if loading the new executable fails, so it cannot return before the new executable has completed loading.
+		How does your code ensure this?
+		How is the load success/failure status passed back to the thread that calls \lstinline{exec}?
+	\end{qc}
+	\TODO{exec syscall load fail handling}
+
+	\begin{qc}
+		B8: Consider parent process \lstinline{P} with child process \lstinline{C}.
+		How do you ensure proper synchronization and avoid race conditions
+		when \lstinline{P} calls \lstinline{wait(C)} before \lstinline{C} exits? After \lstinline{C} exits?
+		How do you ensure that all resources are freed in each case?
+		How about when \lstinline{P} terminates without waiting, before \lstinline{C} exits? After \lstinline{C} exits?
+		Are there any special cases?
+	\end{qc}
+	\TODO{PCB deallocation}
+
+\end{aspect}
+
+\begin{aspect}{RATIONALE}
+	\begin{qc}
+		B9: Why did you choose to implement access to user memory from the kernel in the way that you did?
+	\end{qc}
+	\TODO{accessing user memory from kernel}
+
+	\begin{qc}
+		B10: What advantages or disadvantages can you see to your design for file descriptors?
+	\end{qc}
+	\TODO{file descriptor design}
+
+	\begin{qc}
+		B11: The default \lstinline{tid_t} to \lstinline{pid_t} mapping is the identity mapping.
+		If you changed it, what advantages are there to your approach?
+	\end{qc}
+	\TODO{improving the thread-process mapping}
+\end{aspect}
