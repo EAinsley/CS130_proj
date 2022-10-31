@@ -71,7 +71,124 @@ struct lock filesys_lock;
 		In a few paragraphs, describe the strategy or strategies you adopted for managing these issues.
 		Give an example.
 	\end{qc}
-	\TODO{syscall invalid memory handling, suhzh}
+	We use the function provided by in the PintOS project document.
+	\begin{lstlisting}
+/* Reads a byte at user virtual address UADDR.
+UADDR must be below PHYS_BASE.
+Returns the byte value if successful, -1 if a segfault
+occurred. */
+static int32_t
+get_user (const uint8_t *uaddr)
+{
+  // accessing a kernel space memory, reject
+  if (!((void *)uaddr < PHYS_BASE))
+    return -1;
+
+  int result;
+  asm("movl $1f, %0; movzbl %1, %0; 1:" : "=&a"(result) : "m"(*uaddr));
+  return result;
+}
+	\end{lstlisting}
+Currently a \emph{Base and Bound} virtual memory mechanism is implemented for PintOS.
+The physics memory address below \lstinline{PHYS_BASE} are reserved for the kernel and the higher addresses are used for user processes.
+
+We should prevent reading from or writting to addresses below \lstinline{PHYS_BASE}.
+As for accesses to memory addresses higher than \lstinline{PHYS_BASE}, we should also check if the address belongs to current process.
+
+We implemented two helper functions \lstinline{get_user(addr)} and \lstinline{put_user(addr, byte)}
+which validate the address before accessing the memory and handles possible memory permission error after the access.
+These functions enable us to focus on implementation of functionalities without being obscured by the tedious memory address validation.
+
+For any pointer, we will check NULL value and its address. If the pointer points to a string, we will check it byte by byte until we met the string end (or exceed the bound). If an error is detected, we will terminate the process. This invoke \lstinline{thread_exit}, in which we will clean up the memory. As for the \lstinline{file_lock}, we restricted the atomic operation to the minimal size and only acquire the lock after all the checking has passed. Therefore, when the process exit, the lock will not be in the busy state.
+
+For examble, if we pass an invalid pointer to our \lstinline{write} syscall.
+\begin{lstlisting}
+static int
+SYSCALL_FN (write) (int fd, const void *buffer, unsigned size)
+{
+  // Check pointer, head and tail
+  for (uint32_t i = 0; i < size; i++)
+    check_user_valid_ptr (buffer + i);
+
+  // Handle write to console.
+  if (fd == 1)
+    {
+      putbuf (buffer, size);
+      return size;
+    }
+  // Read file
+  struct file *fp = get_current_open_file (fd);
+  // Write file.
+  int result = 0;
+  ATOMIC_FS_OP { result = file_write (fp, buffer, size); }
+  return result;
+}
+\end{lstlisting}
+The error will be caught in \lstinline{check_user_valid_ptr}
+\begin{lstlisting}
+/* Check whethter the give pointer is valid in user space.  */
+static void
+check_user_valid_ptr (const void *ptr)
+{
+  if (ptr == NULL || get_user (ptr) == -1)
+    err_exit ();
+}
+\end{lstlisting}
+\begin{lstlisting}
+/* process exit on error */
+static void
+err_exit ()
+{
+  thread_current ()->proc->proc_status = PROC_ERROR_EXIT;
+  SYSCALL_FN (exit) (-1);
+}
+\end{lstlisting}
+This will invoke \lstinline{exit} syscall, which will call \lstinline{thread_exit}
+\begin{lstlisting}
+static void
+SYSCALL_FN (exit) (int status)
+{
+  struct proc_record *proc = thread_current ()->proc;
+  if (proc != NULL)
+    {
+      proc->proc_status = PROC_NORMAL_EXIT;
+      proc->exit_code = status;
+    }
+  thread_exit ();
+}
+\end{lstlisting}
+In which we call \lstinline{process_exit}. In the below section
+\begin{lstlisting}
+/* Destroy the current process's page directory and switch back to the
+   kernel-only page directory.
+
+   Correct ordering here is crucial.  We must set cur->pagedir to NULL before
+   switching page directories, so that a timer interrupt can't switch back to
+   the process page directory.  We must activate the base page directory
+   before destroying the process's page directory, or our active page
+   directory will be one that's been freed (and cleared).
+*/
+uint32_t *pd = cur->pagedir;
+cur->pagedir = NULL;
+pagedir_activate (NULL);
+pagedir_destroy (pd);
+
+// Allow write and close file.
+if (cur->proc->image != NULL)
+	{
+		file_allow_write (cur->proc->image);
+		file_close (cur->proc->image);
+	}
+
+// NOTE - Memory freed here!
+fd_list_clear (&cur->proc->fd_list);
+// orphran deallocate process record structure
+if (cur->proc->orphan)
+	palloc_free_page ((void *)cur->proc);
+cur->proc = NULL;
+\end{lstlisting}
+all the allocated resources will be deallocated. Also we can notice that this error detection happens before \lstinline|ATOMIC_FS_OP { result = file_write (fp, buffer, size); }|, that is the lock haven't been acquired, therefore, we don't have to worry about releasing it.
+	% \TODO{syscall invalid memory handling, suhzh}
 \end{aspect}
 
 \begin{aspect}{SYNCHRONIZATION}
@@ -104,7 +221,7 @@ struct lock filesys_lock;
 	\begin{qc}
 		B10: What advantages or disadvantages can you see to your design for file descriptors?
 	\end{qc}
-	\TODO{file descriptor design, suhzh}
+	Each process has its own \lstinline{fd_list}, so the file descriptors in different process are isolated. This will make our system more robust. Since we use a dynamically increased list for our file descriptors, memory usage will be more efficient. The disadvantage is that we use list to store the mapping between file descriptors and files, we have to iterate through the whole list to find the fd. If we could use a dynamically increasing hash table, it will be faster as well as maintaining the memory usage. However, it will be much more comlicated than our current implementation.
 
 	\begin{qc}
 		B11: The default \lstinline{tid_t} to \lstinline{pid_t} mapping is the identity mapping.
