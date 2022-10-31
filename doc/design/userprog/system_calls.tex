@@ -5,13 +5,39 @@
 		`struct' or `struct' member, global or static variable, `typedef', or enumeration.
 		Identify the purpose of each in 25 words or less.
 	\end{qc}
-	\TODO{code change for syscall}
-
+	Add to \lstinline{proc_record}
+	\begin{lstlisting}
+struct list fd_list; // list used to record file descriptors.
+struct file *image;  // the image of self.
+	\end{lstlisting}
+	\lstinline{fd_list} is the list used to store the mapping from \lstinline{fd} to \lstinline{file}. \lstinline{image} is used to store the location of the code of the process.
+	\begin{lstlisting}
+// The struct to record the fd and file mapping.
+struct fd_node
+{
+  int fd;         // file descriptor
+  struct file *f; // file
+  struct list_elem fd_elem;
+};
+	\end{lstlisting}
+\lstinline{fd_node} is the node in the \lstinline{fd_list}.\\
+Add to syscall.c
+\begin{lstlisting}
+/* Locks for the filesystem */
+struct lock filesys_lock;
+\end{lstlisting}	
+\lstinline{filesys_lock} is used to lock the filesystem to prevent intervention. We have also defined an atomic operation for the file system. 
+\begin{lstlisting}
+#define ATOMIC_FS_OP                                                          \
+  for (int i = (lock_acquire (&filesys_lock), 0); i < 1;                      \
+       lock_release (&filesys_lock), i++)
+\end{lstlisting}
 	\begin{qc}
 		B2: Describe how file descriptors are associated with open files.
 		Are file descriptors unique within the entire OS or just within a single process?
 	\end{qc}
-	\TODO{file descriptor ownership}
+	We add a \lstinline{fd_list} for each process. When the process open a new file, we find the minimal unsed fd, and insert fd with the file into the list. When the process close the file, we remove the related node from the list. We also use dynamic memory allocation and carefully handled all the sections related to the memory allocation. When the process exits, the \lstinline{fd_list} will be cleared and deallocate.\\
+	The file descriptors are unique within a single process.
 \end{aspect}
 
 \begin{aspect}{ALGORITHMS}
@@ -45,7 +71,7 @@
 		In a few paragraphs, describe the strategy or strategies you adopted for managing these issues.
 		Give an example.
 	\end{qc}
-	\TODO{syscall invalid memory handling}
+	\TODO{syscall invalid memory handling, suhzh}
 \end{aspect}
 
 \begin{aspect}{SYNCHRONIZATION}
@@ -78,7 +104,7 @@
 	\begin{qc}
 		B10: What advantages or disadvantages can you see to your design for file descriptors?
 	\end{qc}
-	\TODO{file descriptor design}
+	\TODO{file descriptor design, suhzh}
 
 	\begin{qc}
 		B11: The default \lstinline{tid_t} to \lstinline{pid_t} mapping is the identity mapping.
