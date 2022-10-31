@@ -44,7 +44,8 @@ struct lock filesys_lock;
 	\begin{qc}
 		B3: Describe your code for reading and writing user data from the kernel.
 	\end{qc}
-	\TODO{read/write syscall implementation}
+	For read, we first check if the pointer is valid. If not, terminate the process, else, we continue to check if we have permissions to write to the pointer. If we also pass this check, we will try to get the file by the given fd and if fd is valid. If fd is zero, we read data from console. Otherwise, we do an atomic file read operation and return the result.\\
+	For write, we also check the pointer, permissions and fd. If fd is one, we write to console using \lstinline{putbuf()}, otherwise we use an atomic file write operation to write to the files and return the result.
 
 	\begin{qc}
 		B4: Suppose a system call causes a full page (4,096 bytes) of data to be copied from user space into the kernel.
