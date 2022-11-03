@@ -5,20 +5,103 @@
 		`struct' or `struct' member, global or static variable, `typedef', or enumeration.
 		Identify the purpose of each in 25 words or less.
 	\end{qc}
-	\TODO{code change for syscall}
+	\begin{tcolorbox}[title=for process control]
+		In \lstinline{userprog/process.c}, add the following data structure for process control.
+		\begin{lstlisting}
+/* the reason for process termination */
+enum proc_status
+{
+  PROC_RUNNING,     // the process is still running
+  PROC_NORMAL_EXIT, // the process finished running and exit normally
+  PROC_ERROR_EXIT   // the process was kill for a memory error or a invalid system call
+};
+
+#define MAX_CHS 64 // limit of maximum living children of a process
+
+/* the process control block except the pagedir */
+struct proc_record
+{
+  // process id of this process (we use PID=TID since pintos doesn't have multi-threaded process).
+  tid_t id;                              
+  // process exit status code
+  int exit_code;                         
+  // the reason for process termination
+  enum proc_status proc_status;          
+  // up on exit, used to implement `process_wait()`
+  struct semaphore sema_exit;            
+  // whether the parent process exists.
+  // if not, the process record struct is deallocated on exit.
+  // otherwise parent process is responsible for deallocation.
+  bool orphan;                           
+  // process record of children processes on which `wait` haven't been called.
+  struct proc_record *children[MAX_CHS]; 
+};
+		\end{lstlisting}
+	\end{tcolorbox}
+
+	\begin{tcolorbox}[title=for file system access]
+		Add to \lstinline{proc_record}
+		\begin{lstlisting}
+struct list fd_list; // list used to record file descriptors.
+struct file *image;  // the image of self.
+\end{lstlisting}
+		\lstinline{fd_list} is the list used to store the mapping from \lstinline{fd} to \lstinline{file}. \lstinline{image} is used to store the location of the code of the process.
+		\begin{lstlisting}
+/* The struct to record the fd and file mapping. */
+struct fd_node
+{
+  // the file descriptor of a opened file file
+  int fd;         
+  // the handler of a opened file
+  struct file *f;
+  // chaining the `fd_node` up to form a linked list
+  struct list_elem fd_elem;
+};
+	\end{lstlisting}
+		\lstinline{fd_node} is the node in the \lstinline{fd_list}.\\
+		Add to syscall.c
+		\begin{lstlisting}
+/* Locks for the filesystem */
+struct lock filesys_lock;
+\end{lstlisting}
+		\lstinline{filesys_lock} is used to lock the filesystem to prevent intervention. We have also defined an atomic operation for the file system.
+		\begin{lstlisting}
+#define ATOMIC_FS_OP                                                          \
+  for (int i = (lock_acquire (&filesys_lock), 0); i < 1;                      \
+       lock_release (&filesys_lock), i++)
+\end{lstlisting}
+
+	\end{tcolorbox}
 
 	\begin{qc}
 		B2: Describe how file descriptors are associated with open files.
 		Are file descriptors unique within the entire OS or just within a single process?
 	\end{qc}
-	\TODO{file descriptor ownership}
+	We maintain a mapping between file descriptors and opened files for each process using \lstinline{fd_list}. File descriptors mapping are local to a process instead of shared among all processes.\\
+	When a process opens a new file $f$, we find the minimal unsed fd denoted as $d$ and associate $d$ to $f$ by inserting $(f,d)$ into the \lstinline{fd_list} of the process.
+	When a process close a file descriptor $d$, we find the associated file $f$ and remove $(f,d)$ from \lstinline{fd_list}.
+	The \lstinline{fd_list} is dynamically allocated and deallocated.
+	When a process exits, we close all the opened files in \lstinline{fd_list} and deallocate the list.\\
 \end{aspect}
 
 \begin{aspect}{ALGORITHMS}
 	\begin{qc}
 		B3: Describe your code for reading and writing user data from the kernel.
 	\end{qc}
-	\TODO{read/write syscall implementation}
+	We first check if the pointer to the buffer is a valid user memory (above \lstinline{PHYS_BASE}),
+	then we check if every byte in the buffer is in valid user memory segment.
+	Only after the memory validation check can we perform the read/write.\\
+
+	For \lstinline{read} syscall.
+	If the given file descriptor is zero, we read data from console.
+	Otherwise, we will try to find the opened file associated with the given file descriptor in the \lstinline{fd_list}.
+	and run an atomic (protected by the \lstinline{filesys_lock} mutex lock) file system read operation and return the result.
+	For an invalid file descriptor, we simply terminate the process.\\
+	For \lstinline{write} syscall.
+	If the given file descriptor is one, we write to console using \lstinline{putbuf()}.
+	Otherwise, we will try to find the opened file associated with the given file descriptor in the \lstinline{fd_list}.
+	and run an atomic (protected by the \lstinline{filesys_lock} mutex lock) file system write operation to and return the result.
+	For an invalid file descriptor, we simply terminate the process.\\
 
 	\begin{qc}
 		B4: Suppose a system call causes a full page (4,096 bytes) of data to be copied from user space into the kernel.
@@ -26,13 +109,40 @@
 		What about for a system call that only copies 2 bytes of data?
 		Is there room for improvement in these numbers, and how much?
 	\end{qc}
-	\TODO{reducing page table lookup}
+	At least one page inspection and at most two, depending on whethter the data cross a boundary of a page.\\
+	It is the same case for two bytes of data.
+	If they lies in the same page, then we only inspect one page, otherwise two page inspections have to be performed.\\
+
+	Not so much improvement can be done as it is always possible that the data occupies two pages.
+	However, by using larger page size, we can reduce the expectation of page inspections.
 
 	\begin{qc}
 		B5: Briefly describe your implementation of the \lstinline{wait} system call
 		and how it interacts with process termination.
 	\end{qc}
-	\TODO{wait syscall impl}
+	\lstinline{wait} system call will validate the arguments from user and invoke \lstinline{process_wait} which perform the following operations
+	\begin{enumerate}
+		\item The mapping between process id and thread id is an identical mapping, we use the process id as a thread id.
+		\item Check if the given PID is in \lstinline{children} array of current process. If not, return -1.
+		\item Call \lstinline{sema_wait} on the \lstinline{sema_exit} of this child process.
+		\item On \lstinline{sema_wait} return, get the exit code from \lstinline{proc_record} of the child process.
+		\item Deallocate the \lstinline{proc_record} structure for child process and remove it from the \lstinline{children} array.
+	\end{enumerate}
+	To wake up the parent process, child process have to call \lstinline{sema_up} on \lstinline{proc_record->sema_exit} when it exits.\\
+	In \lstinline{process_exit} function, which is called upon every thread exit, we perform the following operations.
+	\begin{enumerate}
+		\item Print process exit message.
+		\item Disable external interrupt to start a critical section.
+		\item For every child process,
+		      if it is still running, set the \lstinline{orphan} flag in its \lstinline{proc_record},
+		      otherwise deallocate the \lstinline{proc_record} for it.
+		\item If current process is an orphan, deallocate the \lstinline{proc_record} since no other process can do the deallocation.
+		\item Set the page directory register correctly.
+		\item Release other resources (opened files and acquired locks)
+		\item Re-enable external interrupt handling to leave the critical section.
+	\end{enumerate}
+
+	These two part of the code implements the \lstinline{wait} system call.
 
 	\begin{qc}
 		B6: Any access to user program memory at a user-specified address can fail due to a bad pointer value.
@@ -45,7 +155,123 @@
 		In a few paragraphs, describe the strategy or strategies you adopted for managing these issues.
 		Give an example.
 	\end{qc}
-	\TODO{syscall invalid memory handling}
+	We use the function provided by in the PintOS project document.
+	\begin{lstlisting}
+/* Reads a byte at user virtual address UADDR.
+UADDR must be below PHYS_BASE.
+Returns the byte value if successful, -1 if a segfault
+occurred. */
+static int32_t
+get_user (const uint8_t *uaddr)
+{
+  // accessing a kernel space memory, reject
+  if (!((void *)uaddr < PHYS_BASE))
+    return -1;
+
+  int result;
+  asm("movl $1f, %0; movzbl %1, %0; 1:" : "=&a"(result) : "m"(*uaddr));
+  return result;
+}
+	\end{lstlisting}
+	Currently a \emph{Base and Bound} virtual memory mechanism is implemented for PintOS.
+	The physics memory address below \lstinline{PHYS_BASE} are reserved for the kernel and the higher addresses are used for user processes.
+
+	We should prevent reading from or writting to addresses below \lstinline{PHYS_BASE}.
+	As for accesses to memory addresses higher than \lstinline{PHYS_BASE}, we should also check if the address belongs to current process.
+
+	We implemented two helper functions \lstinline{get_user(addr)} and \lstinline{put_user(addr, byte)}
+	which validate the address before accessing the memory and handles possible memory permission error after the access.
+	These functions enable us to focus on implementation of functionalities without being obscured by the tedious memory address validation.
+
+	For any pointer, we will check NULL value and its address. If the pointer points to a string, we will check it byte by byte until we met the string end (or exceed the bound). If an error is detected, we will terminate the process. This invoke \lstinline{thread_exit}, in which we will clean up the memory. As for the \lstinline{file_lock}, we restricted the atomic operation to the minimal size and only acquire the lock after all the checking has passed. Therefore, when the process exit, the lock will not be in the busy state.
+
+	For examble, if we pass an invalid pointer to our \lstinline{write} syscall.
+	\begin{lstlisting}
+static int
+SYSCALL_FN (write) (int fd, const void *buffer, unsigned size)
+{
+  // Check pointer, head and tail
+  for (uint32_t i = 0; i < size; i++)
+    check_user_valid_ptr (buffer + i);
+
+  // Handle write to console.
+  if (fd == 1)
+    {
+      putbuf (buffer, size);
+      return size;
+    }
+  // Read file
+  struct file *fp = get_current_open_file (fd);
+  // Write file.
+  int result = 0;
+  ATOMIC_FS_OP { result = file_write (fp, buffer, size); }
+  return result;
+}
+\end{lstlisting}
+	The error will be caught in \lstinline{check_user_valid_ptr}
+	\begin{lstlisting}
+/* Check whethter the give pointer is valid in user space.  */
+static void
+check_user_valid_ptr (const void *ptr)
+{
+  if (ptr == NULL || get_user (ptr) == -1)
+    err_exit ();
+}
+\end{lstlisting}
+	\begin{lstlisting}
+/* process exit on error */
+static void
+err_exit ()
+{
+  thread_current ()->proc->proc_status = PROC_ERROR_EXIT;
+  SYSCALL_FN (exit) (-1);
+}
+\end{lstlisting}
+	This will invoke \lstinline{exit} syscall, which will call \lstinline{thread_exit}
+	\begin{lstlisting}
+static void
+SYSCALL_FN (exit) (int status)
+{
+  struct proc_record *proc = thread_current ()->proc;
+  if (proc != NULL)
+    {
+      proc->proc_status = PROC_NORMAL_EXIT;
+      proc->exit_code = status;
+    }
+  thread_exit ();
+}
+\end{lstlisting}
+	In which we call \lstinline{process_exit}. In the below section
+	\begin{lstlisting}
+/* Destroy the current process's page directory and switch back to the
+   kernel-only page directory.
+
+   Correct ordering here is crucial.  We must set cur->pagedir to NULL before
+   switching page directories, so that a timer interrupt can't switch back to
+   the process page directory.  We must activate the base page directory
+   before destroying the process's page directory, or our active page
+   directory will be one that's been freed (and cleared).
+*/
+uint32_t *pd = cur->pagedir;
+cur->pagedir = NULL;
+pagedir_activate (NULL);
+pagedir_destroy (pd);
+
+// Allow write and close file.
+if (cur->proc->image != NULL)
+  {
+    file_allow_write (cur->proc->image);
+    file_close (cur->proc->image);
+  }
+
+// NOTE - Memory freed here!
+fd_list_clear (&cur->proc->fd_list);
+// orphran deallocate process record structure
+if (cur->proc->orphan)
+  palloc_free_page ((void *)cur->proc);
+cur->proc = NULL;
+\end{lstlisting}
+	all the allocated resources will be deallocated. Also we can notice that this error detection happens before \lstinline|ATOMIC_FS_OP { result = file_write (fp, buffer, size); }|, that is the lock haven't been acquired, therefore, we don't have to worry about releasing it.
 \end{aspect}
 
 \begin{aspect}{SYNCHRONIZATION}
@@ -55,7 +281,10 @@
 		How does your code ensure this?
 		How is the load success/failure status passed back to the thread that calls \lstinline{exec}?
 	\end{qc}
-	\TODO{exec syscall load fail handling}
+	We pass a \lstinline{struct child_arg} object which contains a \lstinline{sema_start} semaphore and a \lstinline{load_failed} flag.
+	We call \lstinline{sema_down} in \lstinline{process_exec} and \lstinline{sema_up} in \lstinline{start_process} right before the function return.
+	Also, we set the \lstinline{load_failed} to the return value of \lstinline{load}.\\
+	Thus, the parent process will wait until the child process ELF file is loaded and can find out whethter the loading has failed.
 
 	\begin{qc}
 		B8: Consider parent process \lstinline{P} with child process \lstinline{C}.
@@ -65,24 +294,39 @@
 		How about when \lstinline{P} terminates without waiting, before \lstinline{C} exits? After \lstinline{C} exits?
 		Are there any special cases?
 	\end{qc}
-	\TODO{PCB deallocation}
+	We put a semaphore in the \lstinline{struct proc_record} for every thread to synchronize \lstinline{wait} and \lstinline{exit}
+	so that the parent process will only access the \lstinline{proc_record} after child process exit and clean-up are finished.\\
+	When a process exits, the \lstinline{struct proc_record} is not destroyed if its parent process is still running,
+	so the parent process \lstinline{wait} call will always call \lstinline{sema_down} on a valid semaphore.\\
+	Therefore, race conditions are avoided for both cases.\\
 
+	When a process exits, it correctly will set the \lstinline{orphan} flag for running children processes
+	(with interrupt disabled so data race between \lstinline{set_orphan} and \lstinline{process_exit} is eliminated).\\
+
+	As for the resources leaking problem,
+	\begin{description}
+		\item[opened files] they are closed on \lstinline{process_exit}
+		\item[\lstinline{proc_record}] are deallocated on exit for orphan process. Otherwise, the parent process is responsible for the deallocation.
+	\end{description}
+	Therefore, all the resources are correctly released.
 \end{aspect}
 
 \begin{aspect}{RATIONALE}
 	\begin{qc}
 		B9: Why did you choose to implement access to user memory from the kernel in the way that you did?
 	\end{qc}
-	\TODO{accessing user memory from kernel}
+	We modified the code in \lstinline{page_fault} to kill the user program on memory error.
+	By doing so, the performance overhead caused by memory address validation espcially for large buffers is greatly reduced.
 
 	\begin{qc}
 		B10: What advantages or disadvantages can you see to your design for file descriptors?
 	\end{qc}
-	\TODO{file descriptor design}
+	Each process has its own \lstinline{fd_list}, so the file descriptors in different process are isolated. This will make our system more robust. Since we use a dynamically increased list for our file descriptors, memory usage will be more efficient. The disadvantage is that we use list to store the mapping between file descriptors and files, we have to iterate through the whole list to find the fd. If we could use a dynamically increasing hash table, it will be faster as well as maintaining the memory usage. However, it will be much more comlicated than our current implementation.
 
 	\begin{qc}
 		B11: The default \lstinline{tid_t} to \lstinline{pid_t} mapping is the identity mapping.
 		If you changed it, what advantages are there to your approach?
 	\end{qc}
-	\TODO{improving the thread-process mapping}
+	If we change the mapping, multi-threaded process will be made possible which allow us to create co-operative threads which may have higher performance if the communication between threads are frequent.\\
+	However, multi-threaded process requires a much more sophisticated scheduler to ensure eventual fairness on process level.
 \end{aspect}

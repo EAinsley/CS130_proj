@@ -3,11 +3,43 @@
 
 \begin{aspect}{DATA STRUCTURES}
 	\begin{qc}
-		A1: Copy here the declaration of eachnew or changed
+		A1: Copy here the declaration of each new or changed
 		`struct' or `struct' member, global or static variable, `typedef', or enumeration.
 		Identify the purpose of each in 25 words or less.
 	\end{qc}
-	\TODO{paste and explain new or changes to code}
+	In \lstinline{userprog/process.c}
+	\begin{lstlisting}
+/* Arguments for the start_process thread function.
+   A `child_arg` structure is created on the stack of `process_execute`
+   and the address is passed to `start_process` which will be run in a new child thread.
+   Parent process only execution of `process_execute` after `sema_down(&child_arg->sema_start)` to prevent data race.
+*/
+struct child_arg
+{
+  // pointer to parent process TCB/PCB, start_process will create TCB/PCB for the child process and
+  // link the TCB/PCB to the PCB of the parent process (the process that called `process_create`)
+  struct thread *parent;
+  // up when the child process is started or the load ELF procedure failed.
+  // process_create will continue execution only when `sema_start` is up
+  struct semaphore sema_start;
+  // copy of the command line string: ELF file name + arguments
+  char *fn_copy;               
+  // whether load ELF procedure has succeeded
+  bool load_failed;
+};
+
+/* helper functions: push arguments from command line onto stack (the stack frame pointer can be referenced as *esp)
+   these functions are called by `start_process`.
+*/
+// esp: stack pointer, name: elf executable file name, args: the command line string except the first token i.e, the elf path
+static void prepare_stack (void **esp, char *name, char *args);
+// align the stack pointer to word address boundary by pushing zero-valued paddings.
+static void esp_push_align (void **esp_);
+// push a word onto the stack
+static void esp_push_u32 (void **esp_, uint32_t val);
+// copy a pointer onto the stack
+static void esp_push_ptr (void **esp_, void *ptr);
+	\end{lstlisting}
 \end{aspect}
 
 \begin{aspect}{ALGORITHMS}
@@ -16,19 +48,56 @@
 		How do you arrange for the elements of \lstinline{argv[]} to be in the right order?
 		How do you avoid overflowing the stack page?
 	\end{qc}
-	\TODO{how to arrange arguments on stack according to X86 calling convention}
+	We implement argument parsing with \lstinline{strtok_r} and populate the stack of the user program according to 80X86 call convention.\\
+
+	This is done in the child thread starting function \lstinline{start_process},
+	where the ELF executable file name, interrupt stack frame ESP pointer and the rest command line arguments are given.
+	\begin{enumerate}
+		\item Prepare a interrupt frame.
+		      We will start running the user program by simulating return from interrupt.
+		\item Use \lstinline{strtok_r} to find the first token of the command, that is, the ELF executable file path.
+		\item Invoke \lstinline{load} on the file path obtained in last step to load the ELF executable file to memory and store the entry point address in the interrupt frame EIP register.
+		      Set the \lstinline{child_arg->load_failed} flag if load failed.
+		\item If the previous load step succeeded, call \lstinline{prepare_stack} to prepare the arguments.
+		      \begin{enumerate}
+			      \item Repeatedly call \lstinline{strtok_r} to extract arguments.
+			            Each time a new argument is found, use \lstinline{esp_push_str} to copy it onto stack
+			            and record its starting address.
+			      \item Push the ELF executable
+			      \item Call \lstinline{esp_push_align} to align the stack pointer ESP register to word boundary.
+			      \item Push the pointer to each argument which are previously recorded when parsing the command line
+			            onto stack with \lstinline{esp_push_ptr}.\\
+			            These pointers forms the \lstinline{argv[]} array.
+			      \item Push the address of \lstinline{argv[0]} (this is the current value of \lstinline{esp}) onto stack.
+			            This is the pointer to the \lstinline{argv[]} array.
+			      \item Finally, push the number of arguments onto stack and push a NULL pointer for the dummy return address.
+		      \end{enumerate}
+		\item Call semaphore up on \lstinline{child_arg->sema_start}.
+	\end{enumerate}
+
+	Stack overflow is not handled in our code.
+	PintOS limits the command for \lstinline{run_task} to 128 bytes, so there is no risk of stack overflowing.
 \end{aspect}
 
 \begin{aspect}{RATIONALE}
 	\begin{qc}
 		A3: Why does Pintos implement \lstinline{strtok_r()} but not \lstinline{strtok()}?
 	\end{qc}
-	\TODO{\lstinline{strtok} race condition}
+	According the \lstinline{strtok(3)} man page.
+	\begin{tcolorbox}
+		\textbullet The \lstinline{strtok()} function uses a static buffer while parsing, so it's not thread safe.
+	\end{tcolorbox}
+	PintOS does not provide \lstinline{strtok()} function to eliminate the possibility of programmer making unsynchronized calls to it.
 
 	\begin{qc}
 		A4: In Pintos, the kernel separates commands into a executable name and arguments.
 		In Unix-like systems, the shell does this separation.
 		Identify at least two advantages of the Unix approach.
 	\end{qc}
-	\TODO{advantages of having a shell for command line arguments handling}
+	\begin{itemize}
+		\item Shell can provided more user-friendly services.
+		      For example, the shell can detect and notify the user that the command can not be found or the argument sequence is incorrect.
+		\item Implementing it in shell opens a door to various features: A shell can support argument string containing spaces.
+		      The shell may also allow variable substituion on the command line arguments.
+	\end{itemize}
 \end{aspect}

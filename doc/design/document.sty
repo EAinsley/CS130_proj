@@ -12,8 +12,6 @@
 \usepackage[dvipsnames]{xcolor} % Required for specifying custom colours
 \definecolor{grey}{rgb}{0.9,0.9,0.9} % Colour of the box surrounding the title
 
-\usepackage[utf8]{inputenc} % Required for inputting international characters
-\usepackage[T1]{fontenc} % Output font encoding for international characters
 \usepackage[sfdefault]{ClearSans} % Use the Clear Sans font (sans serif)
 
 \usepackage{multirow}
@@ -43,7 +41,9 @@
 
 % a TODO marker
 \newcommand{\TODO}[1]{
-\flushright \textcolor{red}{TODO: {#1}}
+	\begin{center}
+		\flushright \textcolor{red}{TODO: {#1}}
+	\end{center}
 }
 
 
