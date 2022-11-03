@@ -165,7 +165,6 @@ process_wait (tid_t tid)
   int code = child_proc->exit_code, reason = child_proc->proc_status;
   // deallocate resources in proc_record for the child
   proc_remove_child (child_proc);
-  fd_list_clear (&child_proc->fd_list);
   palloc_free_page ((void *)child_proc);
   // the child process was killed by kernel on exception, return -1
   if (reason == PROC_ERROR_EXIT)
@@ -209,8 +208,6 @@ process_exit (void)
     }
   intr_set_level (old);
 
-  // notify parent thread that the children have exitted
-  sema_up (&cur->proc->sema_exit);
   /* Destroy the current process's page directory and switch back to the
      kernel-only page directory.
 
@@ -234,6 +231,9 @@ process_exit (void)
 
   // NOTE - Memory freed here!
   fd_list_clear (&cur->proc->fd_list);
+  // notify parent thread that the children have exitted
+  sema_up (&cur->proc->sema_exit);
+
   // orphran deallocate process record structure
   if (cur->proc->orphan)
     palloc_free_page ((void *)cur->proc);
