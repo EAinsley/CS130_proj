@@ -1,0 +1,135 @@
+\section{PRIORITY SCHEDULING}
+\begin{aspect}{DATA STRUCTURES}
+	\begin{qc}
+		B1: Copy here the declaration of each new or changed `struct' or `struct' member, global or static variable, `typedef', or enumeration.  Identify the purpose of each in 25 words or less.
+	\end{qc}
+
+	For \lstinline{struct thread} in \lstinline{threads/thread.h}.
+	\begin{lstlisting}
+    int priority, original_priority; /* Priority after/before donation */
+
+    struct lock *wait_lock; /* the lock for which this thread is waiting for,
+    NULL for running thread */
+    struct list hold_locks; /* the locks hold by this thread */
+        \end{lstlisting}
+
+	For \lstinline{struct lock} in \lstinline{threads/synch.h}.
+	\begin{lstlisting}
+    int priority;          /* maximum waiter priority */
+    struct list_elem elem; /* for `thread::hold_locks` list, see thread.c */
+        \end{lstlisting}
+
+	\begin{qc}
+		B2: Explain the data structure used to track priority donation.
+		Use ASCII art to diagram a nested donation.  (Alternately, submit a
+		.png file.)
+	\end{qc}
+
+	The main idea of priority donation is that
+	a thread get priority boost for holding a lock for which a thread of higher priority thread is waiting.
+	\begin{description}
+		\item[thread] maintain a list of locks hold by this thread and the lock for which this thread is waiting.
+		\item[lock] maintain a list of threads that are waiting for this lock and the lock holder.
+	\end{description}
+	\tcbincludegraphics{pics/donation.png}
+
+\end{aspect}
+
+\begin{aspect}{ALGORITHMS}
+	\begin{qc}
+		B3: How do you ensure that the highest priority thread waiting for a lock, semaphore, or condition variable wakes up first?
+	\end{qc}
+
+	By keeping the threads waiting for a lock/semaphore/condvar in an ordered linked list sorted by their priority.
+	Use insertion sort to maintain the order when a new thread enter the waiting queue or a thread's priority changes.
+	Always pop and unblock the first thread in the waiting list.
+
+	\begin{qc}
+		B4: Describe the sequence of events when a call to \lstinline{lock_acquire()} causes a priority donation.
+		How is nested donation handled?
+	\end{qc}
+
+	\begin{enumerate}
+		\item interrupt is turned off, the current thread now has exclusive access of the single CPU core.
+		\item try to acquire the lock but failed because another thread is already holding the lock.
+		\item insert the current thread into the waiter list of the lock.
+		\item if the current thread's priority is higher than all the other waiting threads, then priority donation is trigger.
+		\item update the maximum waiter priority for that lock, if the donated priority is updated,
+		      pass the priority to the thread who is holding this lock.
+		\item if the priority of the lock holder changes and the lock holder is waiting for another lock,
+		      then do the priority donation recursively.
+		\item the recursive procedure stops when the lock waiter maximum priority can not be updated or the depth reaches some threshold,
+		      the latter case indicates that a dead lock happens.
+		\item interrupt level is recovered.
+		\item the thread is blocked after call to \lstinline{sema_down()} and another thread gains the control of CPU.
+		\item when the thread is resumed and acquired the lock,
+		      add this lock to the thread's holding lock list.
+		      Compute the maximum holding lock priority (a priority of a lock is the maximum waiter priority of this lock) and update the priority of this thread.
+	\end{enumerate}
+
+	\begin{qc}
+		B5: Describe the sequence of events when \lstinline{lock_release()} is called on a lock that a higher-priority thread is waiting for.
+	\end{qc}
+
+	\begin{enumerate}
+		\item interrupt is disable, the thread now has exclusive access of the CPU core.
+		\item remove the lock from the thread's holding lock list.
+		      Recompute the maximum holding lock priority and update the priority of this thread.
+		      The priority donation from the threads waiting for this lock is now canceled.
+		\item interrupt level is recovered.
+		\item the thread calls \lstinline{sema_up()} to release the lock, some thread may occupy the CPU after that.
+	\end{enumerate}
+
+\end{aspect}
+
+\begin{aspect}{SYNCHRONIZATION}
+
+	\begin{qc}
+		B6: Describe a potential race in \lstinline{thread_set_priority()} and explain how your implementation avoids it.
+		Can you use a lock to avoid this race?
+	\end{qc}
+
+	Let's say that we have three threads t0, t1 and t2.
+	\begin{itemize}
+		\item t1 is to change the priority of t0 to $p$
+		\item t2 is to donate priority of $q$ to t0.
+		\item $p<q$
+	\end{itemize}
+
+	Consider the following execution time line.
+	\begin{enumerate}
+		\item t1 calls \lstinline{thread_set_priority()} and was about to set the new priority for t0.
+		\item an external interrupt came and the scheduler is trigger to switch to t2.
+		\item t2 donate $q$ to t0.
+		\item an external interrupt came and the scheduler is trigger to switch to t1.
+		\item the higher donated priority $q$ is overwritten by $p$
+	\end{enumerate}
+	This race condition makes the priority of t0 become lower which may cause dead lock.
+
+	To prevent thread execution interleaving, disable the interrupt in the beginning of \lstinline{thread_set_priority()} and re-enable right before the function returns.
+	Split the priority field of a thread into \lstinline{original_priority, priority_after_donation} so that donated priority won't be overwritten.\\
+	For every thread, the priority donated to it is the maximum priority of the threads who are waiting for a lock hold by this thread.
+	To find donated priority, use a for-loop to go through the list \lstinline{hold_locks} and compute the maximum of \lstinline{lock.waiter_max_priority}.
+	\lstinline{thread_set_priority()} is also modified to changes the \lstinline{original_priority} and re-compute the \lstinline{priority_after_donation}.
+
+\end{aspect}
+
+\begin{aspect}{RATIONALE}
+	\begin{qc}
+		B7: Why did you choose this design?  In what ways is it superior to another design you considered?
+	\end{qc}
+	The final design that we implemented is not a straight-forward one.
+	Initially,
+	we came up with a brute force solution: Every time a thread acquires a lock $L$,
+	we first use BFS to find the who donate priority directly or indrectly.
+	Then use DFS to update the priority of the holder of $L$ denoted by $t_0$,
+	the holder of the lock $t_0$ is waiting denoted by $t_1$ and
+	the holder of the lock $t_1$ is waiting for.\\
+
+	This approach is tedious, it requires us to look at the priority donors and priority receivers at the same time.
+	Also, the recursive calls might be inefficient.\\
+
+	After careful observation, we found that there is no need to track the threads donating priority to this thread.
+	Priority donation and cancelation can be implemented by only updating the priority of lock holder.\\
+	This approach is easy to code compared to other approaches and is has better performance since the priority donation chain is much more simpler.
+\end{aspect}

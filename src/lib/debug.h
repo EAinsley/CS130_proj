@@ -1,6 +1,14 @@
 #ifndef __LIB_DEBUG_H
 #define __LIB_DEBUG_H
 
+#define WITH_LOGGING 0
+
+/* Evaluate an expression and print the value */
+#define LOG_EXPR(EXPR, FMT)                                                   \
+  if (WITH_LOGGING)                                                           \
+    printf ("[LOG %s@(%s:%d)] (%s) evaluates to (" #FMT ")\n", __FUNCTION__,  \
+            __FILE__, __LINE__, #EXPR, (EXPR));
+
 /* GCC lets us add "attributes" to functions, function
    parameters, etc. to indicate their properties.
    See the GCC manual for details. */
@@ -20,20 +28,22 @@ void debug_backtrace_all (void);
 
 #endif
 
-
-
 /* This is outside the header guard so that debug.h may be
    included multiple times with different settings of NDEBUG. */
 #undef ASSERT
 #undef NOT_REACHED
 
 #ifndef NDEBUG
-#define ASSERT(CONDITION)                                       \
-        if (CONDITION) { } else {                               \
-                PANIC ("assertion `%s' failed.", #CONDITION);   \
-        }
+#define ASSERT(CONDITION)                                                     \
+  if (CONDITION)                                                              \
+    {                                                                         \
+    }                                                                         \
+  else                                                                        \
+    {                                                                         \
+      PANIC ("assertion `%s' failed.", #CONDITION);                           \
+    }
 #define NOT_REACHED() PANIC ("executed an unreachable statement");
 #else
-#define ASSERT(CONDITION) ((void) 0)
+#define ASSERT(CONDITION) ((void)0)
 #define NOT_REACHED() for (;;)
 #endif /* lib/debug.h */

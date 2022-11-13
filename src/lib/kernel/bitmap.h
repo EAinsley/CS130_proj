@@ -1,9 +1,9 @@
 #ifndef __LIB_KERNEL_BITMAP_H
 #define __LIB_KERNEL_BITMAP_H
 
+#include <inttypes.h>
 #include <stdbool.h>
 #include <stddef.h>
-#include <inttypes.h>
 
 /* Bitmap abstract data type. */
 

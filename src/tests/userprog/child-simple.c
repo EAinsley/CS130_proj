@@ -2,11 +2,11 @@
    wait-twice tests.
    Just prints a single message and terminates. */
 
-#include <stdio.h>
 #include "tests/lib.h"
+#include <stdio.h>
 
 int
-main (void) 
+main (void)
 {
   test_name = "child-simple";
 

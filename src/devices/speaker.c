@@ -1,14 +1,14 @@
 #include "devices/speaker.h"
 #include "devices/pit.h"
-#include "threads/io.h"
-#include "threads/interrupt.h"
 #include "devices/timer.h"
+#include "threads/interrupt.h"
+#include "threads/io.h"
 
 /* Speaker port enable I/O register. */
-#define SPEAKER_PORT_GATE	0x61
+#define SPEAKER_PORT_GATE 0x61
 
 /* Speaker port enable bits. */
-#define SPEAKER_GATE_ENABLE	0x03
+#define SPEAKER_GATE_ENABLE 0x03
 
 /* Sets the PC speaker to emit a tone at the given FREQUENCY, in
    Hz. */

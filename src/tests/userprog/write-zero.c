@@ -1,12 +1,12 @@
 /* Try a 0-byte write, which should return 0 without writing
    anything. */
 
-#include <syscall.h>
 #include "tests/lib.h"
 #include "tests/main.h"
+#include <syscall.h>
 
 void
-test_main (void) 
+test_main (void)
 {
   int handle, byte_cnt;
   char buf;
@@ -16,5 +16,5 @@ test_main (void)
   buf = 123;
   byte_cnt = write (handle, &buf, 0);
   if (byte_cnt != 0)
-    fail("write() returned %d instead of 0", byte_cnt);
+    fail ("write() returned %d instead of 0", byte_cnt);
 }
