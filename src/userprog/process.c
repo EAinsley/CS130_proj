@@ -566,7 +566,8 @@ setup_stack (void **esp)
 
   // The stack grows from top to bottom. The upage of the initial stack is the
   // frist page from the top.
-  kpage = vm_frame_allocate (PAL_USER | PAL_ZERO, PHYS_BASE - PGSIZE);
+  kpage = vm_frame_allocate (PAL_USER | PAL_ZERO,
+                             ((uint8_t *)PHYS_BASE) - PGSIZE);
   if (kpage != NULL)
     {
       success = install_page (((uint8_t *)PHYS_BASE) - PGSIZE, kpage, true);
