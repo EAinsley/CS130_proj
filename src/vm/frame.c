@@ -12,24 +12,6 @@ static hash_less_func frame_less_function;
 /* The function to choose a frame to swap */
 static struct vm_frame_node *frame_get_victim (void);
 static void vm_frame_clock_pointer_proceed (void);
-struct vm_frame_node
-{
-  /* physical (kernel) address of this frame */
-  void *phy_addr;
-  /* the page that currently occupies this frame*/
-  /* NOTE - Not sure what data type should it be, may be changed later */
-  void *upage_addr;
-
-  /* NOTE - we may need some access control to keep the frame from being
-   * evicted immediately after allocation. Not sure how to do, yet. Maybe we
-   * need: */
-  /* bool pin; */
-
-  /* hash map element, used for quick search*/
-  struct hash_elem hash_elem;
-  /* list element to implement LRU */
-  struct list_elem list_elem;
-};
 
 /* Init the global data*/
 void
