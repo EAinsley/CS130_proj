@@ -19,7 +19,6 @@ static void err_exit (void);
 
 /* Projects 2 and later. */
 static void SYSCALL_FN (halt) (void);
-static void SYSCALL_FN (exit) (int status);
 static tid_t SYSCALL_FN (exec) (const char *cmd_line);
 static int SYSCALL_FN (wait) (tid_t pid);
 static bool SYSCALL_FN (create) (const char *file, unsigned initial_size);
@@ -69,7 +68,7 @@ put_user (uint8_t *udst, uint8_t byte)
 }
 
 /* process exit on error */
-static void
+void
 err_exit ()
 {
   thread_current ()->proc->proc_status = PROC_ERROR_EXIT;
@@ -205,7 +204,7 @@ SYSCALL_FN (halt) (void)
 {
   shutdown_power_off ();
 }
-static void
+void
 SYSCALL_FN (exit) (int status)
 {
   struct proc_record *proc = thread_current ()->proc;
