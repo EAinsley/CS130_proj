@@ -13,6 +13,7 @@
 #include "threads/palloc.h"
 #include "threads/pte.h"
 #include "threads/thread.h"
+#include "vm/frame.h"
 #include <console.h>
 #include <debug.h>
 #include <inttypes.h>
@@ -98,6 +99,11 @@ main (void)
   palloc_init (user_page_limit);
   malloc_init ();
   paging_init ();
+
+/* VM */
+#ifdef VM
+  vm_frame_init ();
+#endif
 
   /* Segmentation. */
 #ifdef USERPROG
