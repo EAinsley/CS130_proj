@@ -11,8 +11,7 @@ static hash_less_func frame_less_function;
 
 /* The function to choose a frame to swap */
 static struct vm_frame_node *frame_get_victim (void);
-static struct vm_frame_node *vm_frame_clock_pointer_next (void);
-static void vm_frame_update_clock_pointer (void);
+static void vm_frame_clock_pointer_proceed (void);
 struct vm_frame_node
 {
   /* physical (kernel) address of this frame */
@@ -41,10 +40,14 @@ vm_frame_init ()
   hash_init (&frame_hash, frame_hash_function, frame_less_function, NULL);
   clock_pointer = list_tail (&frame_list);
 }
+/* Allocate frame.
+  Do not use this allocate pages for kernel process.
+ */
 void *
 vm_frame_allocate (enum palloc_flags flags, void *page_addr)
 {
   lock_acquire (&frame_lock);
+  // Must contain PAL_USER
   void *frame_page = palloc_get_page (PAL_USER | flags);
   // If no empty frame
   if (frame_page == NULL)
@@ -58,7 +61,7 @@ vm_frame_allocate (enum palloc_flags flags, void *page_addr)
   // Allocate memory for the frame.
   struct vm_frame_node *frame = malloc (sizeof (struct vm_frame_node));
   // Allocation failed
-  if (!frame)
+  if (frame == NULL)
     {
       // FIXME - This release should not be here.
       lock_release (&frame_lock);
@@ -74,7 +77,7 @@ vm_frame_allocate (enum palloc_flags flags, void *page_addr)
   return frame_page;
 }
 
-// Release the page
+/* Release the page */
 void
 vm_frame_free (void *addr)
 {
@@ -91,8 +94,14 @@ vm_frame_free (void *addr)
       lock_release (&frame_lock);
       err_exit ();
     }
+  // If the pointer points to the one to be freed, move the pointer to next.
+  if (clock_pointer == &frame_to_be_freed->list_elem)
+    {
+      clock_pointer = list_next (clock_pointer);
+    }
   list_remove (&frame_to_be_freed->list_elem);
   hash_delete (&frame_hash, &frame_to_be_freed->hash_elem);
+  palloc_free_page (frame_to_be_freed->phy_addr);
   free (frame_to_be_freed->phy_addr);
 
   lock_release (&frame_lock);
@@ -110,7 +119,7 @@ frame_get_victim ()
   // NOTE - (Or maybe n+1?).
   for (int i = 0; i < 2 * list_size (&frame_list); i++)
     {
-      vm_frame_update_clock_pointer ();
+      vm_frame_clock_pointer_proceed ();
       struct vm_frame_node *frame
           = list_entry (clock_pointer, struct vm_frame_node, list_elem);
       // Give a seconde chance
@@ -128,7 +137,7 @@ frame_get_victim ()
 
 /* Update the clock pointer. The pointer go throught the list circularly.*/
 static void
-vm_frame_update_clock_pointer (void)
+vm_frame_clock_pointer_proceed (void)
 {
   ASSERT (!list_empty (&frame_list));
   if (clock_pointer == list_tail (&frame_list)
