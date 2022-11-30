@@ -41,7 +41,8 @@ vm_frame_allocate (enum palloc_flags flags, void *page_addr)
       ASSERT (false);
     }
   // Allocate memory for the frame.
-  struct vm_frame_node *frame = malloc (sizeof (struct vm_frame_node));
+  struct vm_frame_node *frame
+      = (struct vm_frame_node *)malloc (sizeof (struct vm_frame_node));
   // Allocation failed
   if (frame == NULL)
     {

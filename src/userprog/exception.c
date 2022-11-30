@@ -11,6 +11,8 @@ static long long page_fault_cnt;
 
 static void kill (struct intr_frame *);
 static void page_fault (struct intr_frame *);
+static bool grow_the_stack (bool not_present, bool write, bool user,
+                            void *fault_addr);
 
 /* Registers handlers for interrupts that can be caused by user
    programs.
@@ -161,6 +163,12 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
 
+  /* Check if the address is valid in user space and grow the stack*/
+  if (grow_the_stack (not_present, write, user, fault_addr))
+    {
+      return;
+    }
+
   /* See section [3.1.5]
      a page fault in the kernel merely sets eax to 0xffffffff
      and copies its former value into eip */
@@ -181,4 +189,29 @@ page_fault (struct intr_frame *f)
           not_present ? "not present" : "rights violation",
           write ? "writing" : "reading", user ? "user" : "kernel");
   kill (f);
+}
+
+static bool
+grow_the_stack (bool not_present, bool write, bool user, void *fault_addr)
+{
+  if (!not_present)
+    return false;
+  if (fault_addr == NULL)
+    {
+      return false;
+    }
+  // Exceed the stack
+  if (((uint32_t)fault_addr) < 0x08048000
+      || is_kernel_vaddr (fault_addr) && user)
+    {
+      return false;
+    }
+  struct thread *t = thread_current ();
+  if (!vm_sup_page_install_zero_page (t->supplemental_table,
+                                      pg_round_down (fault_addr)))
+    return false;
+  if (!vm_sup_page_load_page (t->supplemental_table, t->pagedir,
+                              pg_round_down (fault_addr)))
+    return false;
+  return true;
 }

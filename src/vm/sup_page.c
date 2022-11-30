@@ -1,49 +1,66 @@
 #include "vm/sup_page.h"
 
-/* hash map used to hold the frame mapping*/
-struct hash sup_page_hash;
-
 /* hash function operation*/
-static struct sup_page_entry *page_find_entry (void *upage);
+static struct sup_page_entry *page_find_entry (struct hash *table,
+                                               void *upage);
 /* helper functions */
 static hash_hash_func page_hash_function;
 static hash_less_func page_less_function;
 static hash_action_func frame_destroy_function;
 /* Create a supplemental page table. This function should be called during the
  * process initialization.*/
-struct sup_page_table *
+struct vm_sup_page_table *
 vm_sup_page_create (void)
 {
-  struct sup_page_table *table = malloc (sizeof (struct sup_page_table));
+  struct vm_sup_page_table *table
+      = (struct vm_sup_page_table *)malloc (sizeof (struct vm_sup_page_table));
   hash_init (&table->hash_table, page_hash_function, page_less_function, NULL);
   return table;
 }
 /* Destroy the supplemental page table and release all the resources allocated
  * on it.*/
 void
-vm_sup_page_destroy (struct sup_page_table *page_table)
+vm_sup_page_destroy (struct vm_sup_page_table *page_table)
 {
   hash_destroy (&page_table->hash_table, frame_destroy_function);
 }
 
 bool
-vm_sup_page_install_frame (struct sup_page_table *table, uint32_t *pd,
-                           void *upage, void *kpage)
+vm_sup_page_install_page (struct vm_sup_page_table *table, void *upage,
+                          void *kpage)
 {
-  /* TODO - Not implemented yet */
-  ASSERT (false);
+  struct sup_page_entry *entry
+      = (struct sup_page_entry *)malloc (sizeof (struct sup_page_entry));
+  // allocation failed
+  if (entry == NULL)
+    return false;
+
+  entry->status = LOADED;
+  entry->upage = upage;
+  entry->kpage = kpage;
+  if (hash_insert (&table->hash_table, &entry->hash_elem) != NULL)
+    {
+      // Insertion failed, upage already exist
+      free (entry);
+      return false;
+    }
+
+  return true;
 }
 
 bool
-vm_sup_page_install_zero_frame (struct sup_page_table *table, uint32_t *pd,
-                                void *upage)
+vm_sup_page_install_zero_page (struct vm_sup_page_table *table, void *upage)
 {
-  struct sup_page_entry *entry = malloc (sizeof (struct sup_page_entry));
+  struct sup_page_entry *entry
+      = (struct sup_page_entry *)malloc (sizeof (struct sup_page_entry));
+  // allocation failed
+  if (entry == NULL)
+    return false;
   entry->status = ZERO;
   entry->upage = upage;
   entry->kpage = NULL; // Not set yet
 
-  if (hash_insert (&sup_page_hash, &entry->hash_elem) == NULL)
+  if (hash_insert (&table->hash_table, &entry->hash_elem) != NULL)
     {
       // upage already exist
       return false;
@@ -53,15 +70,14 @@ vm_sup_page_install_zero_frame (struct sup_page_table *table, uint32_t *pd,
 }
 
 bool
-vm_sup_page_install_files (struct sup_page_table *table, uint32_t *pd,
-                           void *upage)
+vm_sup_page_install_files (struct vm_sup_page_table *table, void *upage)
 {
   /* TODO - Not implemented yet */
   ASSERT (false);
 }
 
 bool
-vm_sup_page_remove_frame (struct sup_page_table *table, uint32_t *pd,
+vm_sup_page_remove_frame (struct vm_sup_page_table *table, uint32_t *pd,
                           void *upage)
 {
   /* TODO - Not implemented yet */
@@ -69,13 +85,13 @@ vm_sup_page_remove_frame (struct sup_page_table *table, uint32_t *pd,
 }
 
 bool
-vm_sup_page_load_frame (struct sup_page_table *table, uint32_t *pd,
-                        void *upage)
+vm_sup_page_load_page (struct vm_sup_page_table *table, uint32_t *pd,
+                       void *upage)
 {
-  struct sup_page_entry *entry = page_find_entry (upage);
+  struct sup_page_entry *entry = page_find_entry (&table->hash_table, upage);
   // If the entry doesn't exist, there must be something wrong. Report the
   // result.
-  if (entry != NULL)
+  if (entry == NULL)
     {
       return false;
     }
@@ -126,11 +142,11 @@ vm_sup_page_load_frame (struct sup_page_table *table, uint32_t *pd,
 /* Find the hash element with the given upage. Returns NULL if it doesn't
  * exist. */
 static struct sup_page_entry *
-page_find_entry (void *upage)
+page_find_entry (struct hash *table, void *upage)
 {
   struct sup_page_entry t;
   t.upage = upage;
-  struct hash_page_entry *entry = hash_find (&sup_page_hash, &t.hash_elem);
+  struct hash_page_entry *entry = hash_find (&table, &t.hash_elem);
   return entry;
 }
 

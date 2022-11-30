@@ -2,6 +2,7 @@
 #define THREADS_THREAD_H
 
 #include "userprog/process.h"
+#include "vm/sup_page.h"
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
@@ -106,6 +107,10 @@ struct thread
      the parent proecss deallocate it for the children
   */
   struct proc_record *proc; // data records for process control
+#endif
+
+#ifdef VM
+  struct vm_sup_page_table *supplemental_table;
 #endif
 
   /* Owned by thread.c. */

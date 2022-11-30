@@ -14,7 +14,7 @@ enum SUP_PAGE_STATUS
   ON_SWAP
 };
 
-struct sup_page_table
+struct vm_sup_page_table
 {
   struct hash hash_table;
 };
@@ -32,19 +32,18 @@ struct sup_page_entry
   struct hash_elem hash_elem;
 };
 
-struct sup_page_table *vm_sup_page_create (void);
-void vm_sup_page_destroy (struct sup_page_table *);
+struct vm_sup_page_table *vm_sup_page_create (void);
+void vm_sup_page_destroy (struct vm_sup_page_table *);
 
 // The installs are lazy load. When try to access the real data, you must load
 // the frame first.
-bool vm_sup_page_install_frame (struct sup_page_table *table, uint32_t *pd,
-                                void *upage, void *kpage);
-bool vm_sup_page_install_zero_frame (struct sup_page_table *table,
-                                     uint32_t *pd, void *upage);
-bool vm_sup_page_install_files (struct sup_page_table *table, uint32_t *pd,
-                                void *upage);
-bool vm_sup_page_remove_frame (struct sup_page_table *table, uint32_t *pd,
+bool vm_sup_page_install_page (struct vm_sup_page_table *table, void *upage,
+                               void *kpage);
+bool vm_sup_page_install_zero_page (struct vm_sup_page_table *table,
+                                    void *upage);
+bool vm_sup_page_install_files (struct vm_sup_page_table *table, void *upage);
+bool vm_sup_page_remove_frame (struct vm_sup_page_table *table, uint32_t *pd,
                                void *upage);
-bool vm_sup_page_load_frame (struct sup_page_table *table, uint32_t *pd,
-                             void *upage);
+bool vm_sup_page_load_page (struct vm_sup_page_table *table, uint32_t *pd,
+                            void *upage);
 #endif // SUP_PAGE_H

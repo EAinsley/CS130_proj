@@ -14,6 +14,7 @@
 #include "userprog/pagedir.h"
 #include "userprog/tss.h"
 #include "vm/frame.h"
+#include "vm/sup_page.h"
 #include <debug.h>
 #include <inttypes.h>
 #include <round.h>
@@ -209,15 +210,18 @@ process_exit (void)
     }
   intr_set_level (old);
 
-  /* Destroy the current process's page directory and switch back to the
-     kernel-only page directory.
+/* Destroy the current process's page directory and switch back to the
+   kernel-only page directory.
 
-     Correct ordering here is crucial.  We must set cur->pagedir to NULL before
-     switching page directories, so that a timer interrupt can't switch back to
-     the process page directory.  We must activate the base page directory
-     before destroying the process's page directory, or our active page
-     directory will be one that's been freed (and cleared).
-     */
+   Correct ordering here is crucial.  We must set cur->pagedir to NULL before
+   switching page directories, so that a timer interrupt can't switch back to
+   the process page directory.  We must activate the base page directory
+   before destroying the process's page directory, or our active page
+   directory will be one that's been freed (and cleared).
+   */
+#ifdef VM
+  vm_sup_page_destroy (cur->supplemental_table);
+#endif
   uint32_t *pd = cur->pagedir;
   cur->pagedir = NULL;
   pagedir_activate (NULL);
@@ -344,6 +348,12 @@ load (const char *file_name, void (**eip) (void), void **esp)
   t->pagedir = pagedir_create ();
   if (t->pagedir == NULL)
     goto done;
+#ifdef VM
+  t->supplemental_table = vm_sup_page_create ();
+  if (t->supplemental_table == NULL)
+    goto done;
+#endif
+
   process_activate ();
 
   /* Open executable file. */
@@ -595,8 +605,15 @@ install_page (void *upage, void *kpage, bool writable)
 
   /* Verify that there's not already a page at that virtual
      address, then map our page there. */
-  return (pagedir_get_page (t->pagedir, upage) == NULL
-          && pagedir_set_page (t->pagedir, upage, kpage, writable));
+
+  bool success = (pagedir_get_page (t->pagedir, upage) == NULL
+                  && pagedir_set_page (t->pagedir, upage, kpage, writable));
+  // #ifdef VM
+  // success = success
+  // && vm_sup_page_install_page (t->supplemental_table, t->pagedir,
+  //  upage, kpage);
+  // #endif
+  return success;
 }
 
 /* SECTION-BEGIN */
