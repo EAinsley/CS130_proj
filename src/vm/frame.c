@@ -6,8 +6,8 @@ static struct hash frame_hash;
 static struct list frame_list;
 static struct list_elem *clock_pointer;
 
-static hash_hash_func frame_hash_function;
-static hash_less_func frame_less_function;
+static hash_hash_func page_hash_function;
+static hash_less_func page_less_function;
 
 /* The function to choose a frame to swap */
 static struct vm_frame_node *frame_get_victim (void);
@@ -19,7 +19,7 @@ vm_frame_init ()
 {
   lock_init (&frame_lock);
   list_init (&frame_list);
-  hash_init (&frame_hash, frame_hash_function, frame_less_function, NULL);
+  hash_init (&frame_hash, page_hash_function, page_less_function, NULL);
   clock_pointer = list_tail (&frame_list);
 }
 /* Allocate frame.
@@ -134,15 +134,15 @@ vm_frame_clock_pointer_proceed (void)
 }
 
 static unsigned int
-frame_hash_function (const struct hash_elem *e, void *aux)
+page_hash_function (const struct hash_elem *e, void *aux)
 {
   struct vm_frame_node *n = hash_entry (e, struct vm_frame_node, hash_elem);
   return hash_bytes (&n->phy_addr, sizeof (n->phy_addr));
 }
 
 static bool
-frame_less_function (const struct hash_elem *a, const struct hash_elem *b,
-                     void *aux)
+page_less_function (const struct hash_elem *a, const struct hash_elem *b,
+                    void *aux)
 {
   struct vm_frame_node *node_a
       = hash_entry (a, struct vm_frame_node, hash_elem);
