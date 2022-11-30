@@ -6,7 +6,7 @@ static struct sup_page_entry *page_find_entry (struct hash *table,
 /* helper functions */
 static hash_hash_func page_hash_function;
 static hash_less_func page_less_function;
-static hash_action_func frame_destroy_function;
+static hash_action_func page_destroy_function;
 /* Create a supplemental page table. This function should be called during the
  * process initialization.*/
 struct vm_sup_page_table *
@@ -22,7 +22,7 @@ vm_sup_page_create (void)
 void
 vm_sup_page_destroy (struct vm_sup_page_table *page_table)
 {
-  hash_destroy (&page_table->hash_table, frame_destroy_function);
+  hash_destroy (&page_table->hash_table, page_destroy_function);
 }
 
 bool
@@ -172,11 +172,12 @@ page_less_function (const struct hash_elem *a, const struct hash_elem *b,
 }
 
 static void
-frame_destroy_function (struct hash_elem *e, void *aux UNUSED)
+page_destroy_function (struct hash_elem *e, void *aux UNUSED)
 {
   struct sup_page_entry *n = hash_entry (e, struct sup_page_entry, hash_elem);
   // Free the frame
-  vm_frame_free (n->kpage);
+  if (n->kpage != NULL)
+    vm_frame_free (n->kpage);
   // Frae the entry
   free (n);
 }

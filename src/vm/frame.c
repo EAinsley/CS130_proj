@@ -85,8 +85,8 @@ vm_frame_free (void *kpage)
     }
   list_remove (&frame_to_be_freed->list_elem);
   hash_delete (&frame_hash, &frame_to_be_freed->hash_elem);
-  palloc_free_page (frame_to_be_freed->phy_addr);
-  free (frame_to_be_freed->phy_addr);
+  // palloc_free_page (frame_to_be_freed->phy_addr);
+  free (frame_to_be_freed);
 
   lock_release (&frame_lock);
 }

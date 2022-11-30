@@ -164,7 +164,10 @@ page_fault (struct intr_frame *f)
   user = (f->error_code & PF_U) != 0;
 
   /* Check if the address is valid in user space and grow the stack*/
-  if (grow_the_stack (not_present, write, user, fault_addr))
+
+  printf ("fault addr %p; esp %p\n", fault_addr, f->esp);
+  if (fault_addr > f->esp
+      && grow_the_stack (not_present, write, user, fault_addr))
     {
       return;
     }
@@ -201,6 +204,7 @@ grow_the_stack (bool not_present, bool write UNUSED, bool user,
     {
       return false;
     }
+
   // Exceed the stack
   if (((uint32_t)fault_addr) < 0x08048000
       || (is_kernel_vaddr (fault_addr) && user))
@@ -213,10 +217,6 @@ grow_the_stack (bool not_present, bool write UNUSED, bool user,
     return false;
 
   struct sup_page_entry f;
-  f.upage = pg_round_down (fault_addr);
-  struct hash_elem *e = hash_find (t->supplemental_table, &f.hash_elem);
-  struct sup_page_entry *deb
-      = hash_entry (e, struct sup_page_entry, hash_elem);
   if (!vm_sup_page_load_page (t->supplemental_table, t->pagedir,
                               pg_round_down (fault_addr)))
     return false;
