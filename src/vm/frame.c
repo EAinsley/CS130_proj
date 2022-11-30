@@ -13,6 +13,9 @@ static hash_less_func page_less_function;
 static struct vm_frame_node *frame_get_victim (void);
 static void vm_frame_clock_pointer_proceed (void);
 
+/* get the vm_frame_node according to the kpage */
+static struct vm_frame_node *frame_find_entry (void *kpage);
+
 /* Init the global data*/
 void
 vm_frame_init ()
@@ -35,7 +38,7 @@ vm_frame_allocate (enum palloc_flags flags, void *page_addr)
   if (frame_page == NULL)
     {
       // Try to get a page to evict
-      struct vm_frame_node *frame_evict = frame_get_victim ();
+      struct vm_frame_node *frame_evict UNUSED = frame_get_victim ();
       /* TODO - swap the page */
       /* NOTE - swap haven't been implemented yet, panic the kernel */
       ASSERT (false);
@@ -62,16 +65,14 @@ vm_frame_allocate (enum palloc_flags flags, void *page_addr)
 
 /* Release the page */
 void
-vm_frame_free (void *addr)
+vm_frame_free (void *kpage)
 {
   lock_acquire (&frame_lock);
-  ASSERT (is_kernel_vaddr (addr));
-  ASSERT (pg_ofs (addr) == 0);
+  ASSERT (is_kernel_vaddr (kpage));
+  ASSERT (pg_ofs (kpage) == 0);
   // Find the addr
-  struct vm_frame_node t;
-  t.phy_addr = addr;
-  struct vm_frame_node *frame_to_be_freed
-      = hash_find (&frame_hash, &t.hash_elem);
+
+  struct vm_frame_node *frame_to_be_freed = frame_find_entry (kpage);
   if (frame_to_be_freed == NULL)
     {
       lock_release (&frame_lock);
@@ -100,7 +101,7 @@ frame_get_victim ()
   // In case all the frames are accessed. We have to use 2 * n to iterate
   // through the list twice
   // NOTE - (Or maybe n+1?).
-  for (int i = 0; i < 2 * list_size (&frame_list); i++)
+  for (size_t i = 0; i < 2 * list_size (&frame_list); i++)
     {
       vm_frame_clock_pointer_proceed ();
       struct vm_frame_node *frame
@@ -116,6 +117,16 @@ frame_get_victim ()
           return frame;
         }
     }
+  return NULL;
+}
+
+static struct vm_frame_node *
+frame_find_entry (void *kpage)
+{
+  struct vm_frame_node t;
+  t.phy_addr = kpage;
+  struct hash_elem *e = hash_find (&frame_hash, &t.hash_elem);
+  return hash_entry (e, struct vm_frame_node, hash_elem);
 }
 
 /* Update the clock pointer. The pointer go throught the list circularly.*/
@@ -135,19 +146,19 @@ vm_frame_clock_pointer_proceed (void)
 }
 
 static unsigned int
-page_hash_function (const struct hash_elem *e, void *aux)
+page_hash_function (const struct hash_elem *e, void *aux UNUSED)
 {
   struct vm_frame_node *n = hash_entry (e, struct vm_frame_node, hash_elem);
-  return hash_bytes (&n->phy_addr, sizeof (n->phy_addr));
+  return hash_int ((int)n->phy_addr);
 }
 
 static bool
 page_less_function (const struct hash_elem *a, const struct hash_elem *b,
-                    void *aux)
+                    void *aux UNUSED)
 {
   struct vm_frame_node *node_a
       = hash_entry (a, struct vm_frame_node, hash_elem);
   struct vm_frame_node *node_b
       = hash_entry (b, struct vm_frame_node, hash_elem);
-  return &node_a->phy_addr < &node_b->phy_addr;
+  return node_a->phy_addr < node_b->phy_addr;
 }

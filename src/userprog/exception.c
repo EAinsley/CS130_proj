@@ -192,7 +192,8 @@ page_fault (struct intr_frame *f)
 }
 
 static bool
-grow_the_stack (bool not_present, bool write, bool user, void *fault_addr)
+grow_the_stack (bool not_present, bool write UNUSED, bool user,
+                void *fault_addr)
 {
   if (!not_present)
     return false;
@@ -202,7 +203,7 @@ grow_the_stack (bool not_present, bool write, bool user, void *fault_addr)
     }
   // Exceed the stack
   if (((uint32_t)fault_addr) < 0x08048000
-      || is_kernel_vaddr (fault_addr) && user)
+      || (is_kernel_vaddr (fault_addr) && user))
     {
       return false;
     }
@@ -210,6 +211,12 @@ grow_the_stack (bool not_present, bool write, bool user, void *fault_addr)
   if (!vm_sup_page_install_zero_page (t->supplemental_table,
                                       pg_round_down (fault_addr)))
     return false;
+
+  struct sup_page_entry f;
+  f.upage = pg_round_down (fault_addr);
+  struct hash_elem *e = hash_find (t->supplemental_table, &f.hash_elem);
+  struct sup_page_entry *deb
+      = hash_entry (e, struct sup_page_entry, hash_elem);
   if (!vm_sup_page_load_page (t->supplemental_table, t->pagedir,
                               pg_round_down (fault_addr)))
     return false;

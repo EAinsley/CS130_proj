@@ -70,15 +70,16 @@ vm_sup_page_install_zero_page (struct vm_sup_page_table *table, void *upage)
 }
 
 bool
-vm_sup_page_install_files (struct vm_sup_page_table *table, void *upage)
+vm_sup_page_install_files (struct vm_sup_page_table *table UNUSED,
+                           void *upage UNUSED)
 {
   /* TODO - Not implemented yet */
   ASSERT (false);
 }
 
 bool
-vm_sup_page_remove_frame (struct vm_sup_page_table *table, uint32_t *pd,
-                          void *upage)
+vm_sup_page_remove_frame (struct vm_sup_page_table *table UNUSED,
+                          uint32_t *pd UNUSED, void *upage UNUSED)
 {
   /* TODO - Not implemented yet */
   ASSERT (false);
@@ -121,6 +122,7 @@ vm_sup_page_load_page (struct vm_sup_page_table *table, uint32_t *pd,
       ASSERT (false);
       break;
     default:
+      ASSERT (false);
       break;
     }
 
@@ -146,31 +148,31 @@ page_find_entry (struct hash *table, void *upage)
 {
   struct sup_page_entry t;
   t.upage = upage;
-  struct hash_page_entry *entry = hash_find (&table, &t.hash_elem);
-  return entry;
+  struct hash_elem *e = hash_find (table, &t.hash_elem);
+  return hash_entry (e, struct sup_page_entry, hash_elem);
 }
 
 /* hash functions */
 static unsigned int
-page_hash_function (const struct hash_elem *e, void *aux)
+page_hash_function (const struct hash_elem *e, void *aux UNUSED)
 {
   struct sup_page_entry *n = hash_entry (e, struct sup_page_entry, hash_elem);
-  return hash_bytes (&n->upage, sizeof (n->upage));
+  return hash_int (pg_no (n->upage));
 }
 
 static bool
 page_less_function (const struct hash_elem *a, const struct hash_elem *b,
-                    void *aux)
+                    void *aux UNUSED)
 {
   struct sup_page_entry *node_a
       = hash_entry (a, struct sup_page_entry, hash_elem);
   struct sup_page_entry *node_b
       = hash_entry (b, struct sup_page_entry, hash_elem);
-  return &node_a->upage < &node_b->upage;
+  return node_a->upage < node_b->upage;
 }
 
 static void
-frame_destroy_function (struct hash_elem *e, void *aux)
+frame_destroy_function (struct hash_elem *e, void *aux UNUSED)
 {
   struct sup_page_entry *n = hash_entry (e, struct sup_page_entry, hash_elem);
   // Free the frame
