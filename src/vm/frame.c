@@ -63,9 +63,22 @@ vm_frame_allocate (enum palloc_flags flags, void *page_addr)
   return frame_page;
 }
 
-/* Release the page */
+/* Release the page.
+  If free_resource is set, palloc_free_page.
+  (This is a workaround provided for the vm_sup_page_destroy:
+  When destroy the pagedir, it will release the resources, but so will the
+  sup_page_table. This will release the resources twice. So, we only need to
+  remove the entry in our sup_table, and leave the other work for the
+  pagedir.
+
+  Since the user doesn't have heap, it will never release its
+  resorces when running, we only have to remove them all when the process end.
+  Therefore, we don't have to consider the consistency between pagedir and
+  sup_page_table.
+    )
+ */
 void
-vm_frame_free (void *kpage)
+vm_frame_free (void *kpage, bool free_resource)
 {
   lock_acquire (&frame_lock);
   ASSERT (is_kernel_vaddr (kpage));
@@ -85,7 +98,8 @@ vm_frame_free (void *kpage)
     }
   list_remove (&frame_to_be_freed->list_elem);
   hash_delete (&frame_hash, &frame_to_be_freed->hash_elem);
-  // palloc_free_page (frame_to_be_freed->phy_addr);
+  if (free_resource)
+    palloc_free_page (frame_to_be_freed->phy_addr);
   free (frame_to_be_freed);
 
   lock_release (&frame_lock);

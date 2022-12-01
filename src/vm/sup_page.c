@@ -177,7 +177,7 @@ page_destroy_function (struct hash_elem *e, void *aux UNUSED)
   struct sup_page_entry *n = hash_entry (e, struct sup_page_entry, hash_elem);
   // Free the frame
   if (n->kpage != NULL)
-    vm_frame_free (n->kpage);
+    vm_frame_free (n->kpage, false);
   // Frae the entry
   free (n);
 }
