@@ -107,6 +107,12 @@ struct thread
      the parent proecss deallocate it for the children
   */
   struct proc_record *proc; // data records for process control
+  /*
+  Syscall handler may trigger page fault in kernel-mode.
+  In this case, page fault interrupt frame ESP is not the user-prog ESP but the kernel stack pointer.
+  To correctly handle the case and grow the stack, we have to save ESP in syscall handler.
+  */
+  void *userprog_syscall_esp; // save the ESP stack pointer for page-fault handling
 #endif
 
 #ifdef VM

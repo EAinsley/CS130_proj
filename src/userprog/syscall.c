@@ -167,7 +167,12 @@ _syscall_arg (struct intr_frame *f, uint32_t idx)
 static void
 syscall_handler (struct intr_frame *f)
 {
+
   int id = syscall_arg (f, 0, int);
+
+  // save user prog ESP for potential page fault in syscall procedure.
+  thread_current ()->userprog_syscall_esp = f->esp;
+
   /* Projects 2 and later. */
   FWD_CASE (SYS_HALT, FWD0 (halt));
   FWD_CASE (SYS_EXIT, FWD1 (exit, int));

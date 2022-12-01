@@ -162,7 +162,12 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
 
-  // FIXME - Get user space esp when page fault from kernel (syscall).
+  /* find correct user process ESP:
+    - page fault from user: `f->esp`
+    - page fault from kernel(syscall): `userprog_syscall_esp`
+  */
+  void *esp = user ? f->esp : thread_current ()->userprog_syscall_esp;
+
   /* Check if the address is valid in user space and grow the stack*/
   // Check if the fault addr is valid:
   // not_present
@@ -170,13 +175,14 @@ page_fault (struct intr_frame *f)
   // not a user try to access the kernel
   // on the stack
   bool valid = not_present && fault_addr;
-  valid = valid && fault_addr >= 0x08048000 && fault_addr <= PHYS_BASE;
+  valid = valid && fault_addr >= (void *)0x08048000 && fault_addr <= PHYS_BASE;
   valid = valid && !(is_kernel_vaddr (fault_addr) && user);
+
   // See
   // https://alfredthiel.gitbook.io/pintosbook/project-description/lab3b-mmap-files/faq#why-do-user-processes-sometimes-fault-above-the-stack-pointer
   valid = valid
-          && (fault_addr >= f->esp || fault_addr == f->esp - 4
-              || fault_addr == f->esp - 32);
+          && (fault_addr >= esp || fault_addr == esp - 4
+              || fault_addr == esp - 32);
   if (valid && grow_the_stack (fault_addr))
     return;
 
@@ -211,7 +217,6 @@ grow_the_stack (void *fault_addr)
                                       pg_round_down (fault_addr)))
     return false;
 
-  struct sup_page_entry f;
   if (!vm_sup_page_load_page (t->supplemental_table, t->pagedir,
                               pg_round_down (fault_addr)))
     return false;
