@@ -538,25 +538,12 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
-      /* Get a page of memory. */
-      uint8_t *kpage = vm_frame_allocate (PAL_USER, upage);
-      if (kpage == NULL)
+      // lazy load page from ELF file
+      bool load_page_ret = vm_sup_page_install_files (
+          thread_current ()->supplemental_table, upage, file, ofs,
+          page_read_bytes, writable);
+      if (!load_page_ret)
         return false;
-
-      /* Load this page. */
-      if (file_read (file, kpage, page_read_bytes) != (int)page_read_bytes)
-        {
-          vm_frame_free (kpage, true);
-          return false;
-        }
-      memset (kpage + page_read_bytes, 0, page_zero_bytes);
-
-      /* Add the page to the process's address space. */
-      if (!install_page (upage, kpage, writable))
-        {
-          vm_frame_free (kpage, true);
-          return false;
-        }
 
       /* Advance. */
       read_bytes -= page_read_bytes;
@@ -574,8 +561,8 @@ setup_stack (void **esp)
   uint8_t *kpage;
   bool success = false;
 
-  // The stack grows from top to bottom. The upage of the initial stack is the
-  // frist page from the top.
+  // The stack grows from top to bottom. The upage of the initial stack is
+  // the frist page from the top.
   kpage = vm_frame_allocate (PAL_USER | PAL_ZERO,
                              ((uint8_t *)PHYS_BASE) - PGSIZE);
   if (kpage != NULL)
