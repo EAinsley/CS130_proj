@@ -31,9 +31,11 @@ vm_frame_init ()
 void *
 vm_frame_allocate (enum palloc_flags flags, void *page_addr)
 {
+  ASSERT (flags & PAL_USER);
+
   lock_acquire (&frame_lock);
   // Must contain PAL_USER
-  void *frame_page = palloc_get_page (PAL_USER | flags);
+  void *frame_page = palloc_get_page (flags);
   // If no empty frame
   if (frame_page == NULL)
     {

@@ -13,7 +13,6 @@
 #include "threads/palloc.h"
 #include "threads/pte.h"
 #include "threads/thread.h"
-#include "vm/frame.h"
 #include <console.h>
 #include <debug.h>
 #include <inttypes.h>
@@ -23,6 +22,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef VM
+#include "vm/frame.h"
+#include "vm/swap.h"
+#endif
 #ifdef USERPROG
 #include "userprog/exception.h"
 #include "userprog/gdt.h"
@@ -103,6 +106,7 @@ main (void)
 /* VM */
 #ifdef VM
   vm_frame_init ();
+  vm_swap_init ();
 #endif
 
   /* Segmentation. */
