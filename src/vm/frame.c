@@ -86,6 +86,7 @@ vm_frame_allocate (enum palloc_flags flags, void *page_addr)
       victim->owner = thread_current ();
       victim->upage_addr = page_addr;
       frame_page = victim->phy_addr;
+      memset (frame_page, 0, PGSIZE);
     }
 
   return frame_page;
@@ -209,7 +210,7 @@ page_less_function (const struct hash_elem *a, const struct hash_elem *b,
 static struct vm_frame *
 new_frame (void *kpage, void *upage, struct thread *owner)
 {
-  struct vm_frame *f = (struct vm_frame *)malloc (sizeof (struct vm_frame));
+  struct vm_frame *f = (struct vm_frame *)calloc (sizeof (struct vm_frame), 1);
   if (f)
     {
       memset ((void *)f, 0, sizeof (struct vm_frame));
