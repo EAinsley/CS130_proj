@@ -52,45 +52,41 @@ vm_frame_allocate (enum palloc_flags flags, void *page_addr)
   ASSERT (flags & PAL_USER);
 
   void *frame_page = palloc_get_page (flags);
-  // swap out a page
-  if (frame_page == NULL)
-    FRAME_CRITICAL
+  struct vm_frame *frame = NULL;
+  if (frame_page)
     {
+      frame = new_frame (frame_page, page_addr, thread_current ());
+      // add the newly allocated frame into present frame list
+      FRAME_CRITICAL
+      {
+        hash_insert (&frame_hash, &frame->hash_elem);
+        list_insert (clock_pointer, &frame->list_elem);
+      }
+    }
+  else
+    {
+      struct vm_frame *victim = NULL;
       // Try to get a page to evict
-      struct vm_frame *victim = frame_get_victim ();
-      struct thread *owner = victim->owner;
+      FRAME_CRITICAL { victim = frame_get_victim (); }
+      struct thread *owner_old = victim->owner;
 
       // write down to swap
       swap_idx swap_slot = vm_swap_save (victim->phy_addr);
 
       // remove the page-frame mapping for the owner
-      pagedir_clear_page (owner->pagedir, victim->upage_addr);
+      pagedir_clear_page (owner_old->pagedir, victim->upage_addr);
       struct sup_page_entry *entry = vm_sup_page_find_entry (
-          owner->supplemental_table, victim->upage_addr);
+          owner_old->supplemental_table, victim->upage_addr);
       ASSERT (entry);
       entry->status = ON_SWAP;
       entry->kpage = NULL;
       entry->swap_slot = swap_slot;
 
-      // reuse this frame
-      hash_delete (&frame_hash, &victim->hash_elem);
-      list_remove (&victim->list_elem);
-      frame_page = victim->phy_addr;
+      // reuse the frame
+      victim->owner = thread_current ();
+      victim->upage_addr = page_addr;
+      frame = victim;
     }
-
-  // Allocate memory for the frame struct
-  struct vm_frame *frame
-      = new_frame (frame_page, page_addr, thread_current ());
-  // Allocation failed
-  if (frame == NULL)
-    return NULL;
-
-  // add the newly allocated frame into present frame list
-  FRAME_CRITICAL
-  {
-    hash_insert (&frame_hash, &frame->hash_elem);
-    list_insert (clock_pointer, &frame->list_elem);
-  }
 
   return frame_page;
 }
