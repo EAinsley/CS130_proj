@@ -34,6 +34,7 @@ vm_swap_init ()
 swap_idx
 vm_swap_save (void *page)
 {
+  DEBUG_PRINT ("[VM.SWAP] save k-page at %p\n", page);
   // swap must be enabled
   ASSERT (swap_block);
   // should never evict pages for kernel.

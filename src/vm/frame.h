@@ -17,7 +17,7 @@ struct vm_frame
   /* NOTE - we may need some access control to keep the frame from being
    * evicted immediately after allocation. Not sure how to do, yet. Maybe we
    * need: */
-  // /* bool pin; */
+  bool pin;
 
   /* hash map element, used for quick search*/
   struct hash_elem hash_elem;
