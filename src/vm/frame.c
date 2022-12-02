@@ -172,7 +172,7 @@ frame_find_entry (void *kpage)
   struct vm_frame t;
   t.phy_addr = kpage;
   struct hash_elem *e = hash_find (&frame_hash, &t.hash_elem);
-  return hash_entry (e, struct vm_frame, hash_elem);
+  return e ? hash_entry (e, struct vm_frame, hash_elem) : NULL;
 }
 
 /* Update the clock pointer. The pointer go throught the list circularly.*/

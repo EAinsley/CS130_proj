@@ -132,7 +132,7 @@ vm_sup_page_load_page (struct vm_sup_page_table *table, uint32_t *pd,
         struct file *f = entry->lazy_load.f;
         entry->writable = entry->lazy_load.w;
         DEBUG_PRINT ("load page %p, with permission %d\n", upage,
-                (int)entry->writable);
+                     (int)entry->writable);
 
         file_seek (f, ofs);
         if ((off_t)len != file_read (f, kpage, len))
@@ -175,7 +175,7 @@ vm_sup_page_find_entry (struct vm_sup_page_table *table, void *upage)
   struct sup_page_entry t;
   t.upage = upage;
   struct hash_elem *e = hash_find (&table->hash_table, &t.hash_elem);
-  return hash_entry (e, struct sup_page_entry, hash_elem);
+  return e ? hash_entry (e, struct sup_page_entry, hash_elem) : NULL;
 }
 
 /* hash functions */
