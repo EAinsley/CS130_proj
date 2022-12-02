@@ -216,5 +216,6 @@ vm_ste_new ()
 {
   struct sup_page_entry *entry
       = (struct sup_page_entry *)calloc (sizeof (struct sup_page_entry), 1);
+  entry->writable = true;
   return entry;
 }
