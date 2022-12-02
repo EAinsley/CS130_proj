@@ -71,6 +71,11 @@ vm_frame_allocate (enum palloc_flags flags, void *page_addr)
       entry->status = ON_SWAP;
       entry->kpage = NULL;
       entry->swap_slot = swap_slot;
+
+      // reuse this frame
+      hash_delete (&frame_hash, &victim->hash_elem);
+      list_remove (&victim->list_elem);
+      frame_page = victim->phy_addr;
     }
 
   // Allocate memory for the frame struct
@@ -78,9 +83,7 @@ vm_frame_allocate (enum palloc_flags flags, void *page_addr)
       = new_frame (frame_page, page_addr, thread_current ());
   // Allocation failed
   if (frame == NULL)
-    {
-      return NULL;
-    }
+    return NULL;
 
   // add the newly allocated frame into present frame list
   FRAME_CRITICAL
