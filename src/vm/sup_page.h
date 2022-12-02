@@ -1,5 +1,8 @@
 #ifndef SUP_PAGE_H
 #define SUP_PAGE_H
+#include "filesys/file.h"
+#include "filesys/filesys.h"
+#include "filesys/off_t.h"
 #include "lib/kernel/hash.h"
 #include "lib/string.h"
 #include "threads/malloc.h"
@@ -22,6 +25,14 @@ struct vm_sup_page_table
   struct hash hash_table;
 };
 
+struct lazy_load_page
+{
+  struct file *f;
+  off_t ofs;
+  uint32_t len;
+  bool w;
+};
+
 struct sup_page_entry
 {
   /* status of this page table entry */
@@ -30,6 +41,12 @@ struct sup_page_entry
   void *upage;
   /* Kernal space addr*/
   void *kpage;
+
+  /*
+  a lazy load page from the ELF executable file
+  Only applicable when status==IN_FILE
+  */
+  struct lazy_load_page lazy_load;
 
   /*
   The slot index in SWAP where this page is stored.
@@ -50,7 +67,9 @@ bool vm_sup_page_install_page (struct vm_sup_page_table *table, void *upage,
                                void *kpage);
 bool vm_sup_page_install_zero_page (struct vm_sup_page_table *table,
                                     void *upage);
-bool vm_sup_page_install_files (struct vm_sup_page_table *table, void *upage);
+bool vm_sup_page_install_files (struct vm_sup_page_table *table, void *upage,
+                                struct file *f, off_t ofs,
+                                uint32_t page_read_bytes, bool writable);
 bool vm_sup_page_load_page (struct vm_sup_page_table *table, uint32_t *pd,
                             void *upage);
 
