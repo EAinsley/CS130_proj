@@ -136,6 +136,12 @@ main (void)
   vm_swap_init ();
 #endif
 
+/* VM */
+#ifdef VM
+  vm_frame_init ();
+  vm_swap_init ();
+#endif
+
   printf ("Boot complete.\n");
 
   /* Run actions specified on kernel command line. */
