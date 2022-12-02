@@ -81,6 +81,7 @@ vm_sup_page_install_files (struct vm_sup_page_table *table, void *upage,
   entry->status = IN_FILE;
   entry->upage = upage;
   entry->kpage = NULL;
+  entry->writable = w;
 
   // wait for lazy load
   entry->lazy_load.f = f;
@@ -119,7 +120,6 @@ vm_sup_page_load_page (struct vm_sup_page_table *table, uint32_t *pd,
       return false;
     }
 
-  bool writable = true;
   switch (entry->status)
     {
     case ZERO:
@@ -130,8 +130,9 @@ vm_sup_page_load_page (struct vm_sup_page_table *table, uint32_t *pd,
         off_t ofs = entry->lazy_load.ofs;
         uint32_t len = entry->lazy_load.len;
         struct file *f = entry->lazy_load.f;
-        writable = entry->lazy_load.w;
-        printf ("load page %p, with permission %d\n", upage, (int)writable);
+        entry->writable = entry->lazy_load.w;
+        printf ("load page %p, with permission %d\n", upage,
+                (int)entry->writable);
 
         file_seek (f, ofs);
         if ((off_t)len != file_read (f, kpage, len))
@@ -152,7 +153,7 @@ vm_sup_page_load_page (struct vm_sup_page_table *table, uint32_t *pd,
     }
 
   // Set page directory
-  if (!pagedir_set_page (pd, upage, kpage, writable))
+  if (!pagedir_set_page (pd, upage, kpage, entry->writable))
     {
       // Memory allocation failed.
       return false;

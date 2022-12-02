@@ -42,6 +42,9 @@ struct sup_page_entry
   /* Kernal space addr*/
   void *kpage;
 
+  /* permission */
+  bool writable;
+
   /*
   a lazy load page from the ELF executable file
   Only applicable when status==IN_FILE

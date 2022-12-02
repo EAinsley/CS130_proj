@@ -149,7 +149,6 @@ page_fault (struct intr_frame *f)
      (#PF)". */
   asm("movl %%cr2, %0" : "=r"(fault_addr));
   void *fault_page = pg_round_down (fault_addr);
-  printf ("[fault at] %p, page=%p\n", fault_addr, fault_page);
 
   /* Turn interrupts back on (they were only off so that we could
      be assured of reading CR2 before it changed). */
@@ -162,6 +161,9 @@ page_fault (struct intr_frame *f)
   not_present = (f->error_code & PF_P) == 0;
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
+
+  printf ("[fault at] %p, page=%p; (u,w)=(%d,%d)\n", fault_addr, fault_page,
+          (int)user, (int)write);
 
   /* See section [3.1.5]
      a page fault in the kernel merely sets eax to 0xffffffff
