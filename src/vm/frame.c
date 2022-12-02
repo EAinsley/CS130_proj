@@ -85,7 +85,7 @@ vm_frame_allocate (enum palloc_flags flags, void *page_addr)
       // reuse the frame
       victim->owner = thread_current ();
       victim->upage_addr = page_addr;
-      frame = victim;
+      frame_page = victim->phy_addr;
     }
 
   return frame_page;
