@@ -1,28 +1,23 @@
 #ifndef VM_FRAME_H
 #define VM_FRAME_H
-#include "debug.h"
 #include "lib/kernel/hash.h"
 #include "lib/kernel/list.h"
-#include "threads/malloc.h"
 #include "threads/palloc.h"
-#include "threads/synch.h"
 #include "threads/thread.h"
-#include "threads/vaddr.h"
-#include "userprog/pagedir.h"
-#include "userprog/syscall.h"
 
-struct vm_frame_node
+struct vm_frame
 {
   /* physical (kernel) address of this frame */
   void *phy_addr;
   /* the page that currently occupies this frame*/
-  /* NOTE - Not sure what data type should it be, may be changed later */
   void *upage_addr;
+  /* the thread who have a page mapped to this frame */
+  struct thread *owner;
 
   /* NOTE - we may need some access control to keep the frame from being
    * evicted immediately after allocation. Not sure how to do, yet. Maybe we
    * need: */
-  /* bool pin; */
+  // /* bool pin; */
 
   /* hash map element, used for quick search*/
   struct hash_elem hash_elem;

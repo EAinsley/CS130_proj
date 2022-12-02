@@ -22,7 +22,7 @@ void
 vm_swap_init ()
 {
   swap_block = block_get_role (BLOCK_SWAP);
-  ASSERT (swap_block != NULL);
+  ASSERT (swap_block);
 
   uint32_t swap_slots = block_size (swap_block) / SEC_PER_FRAME;
   used_slots = bitmap_create_in_buf (swap_slots, (void *)bitmap_buf,
@@ -34,26 +34,32 @@ vm_swap_init ()
 swap_idx
 vm_swap_save (void *page)
 {
+  // swap must be enabled
+  ASSERT (swap_block);
   // should never evict pages for kernel.
   ASSERT (page >= PHYS_BASE);
 
+  // find and occupy a free slot, this must by synchronized
+  swap_idx idx;
   SWAP_CRITICAL
   {
-    swap_idx idx = find_free_slot ();
+    idx = find_free_slot ();
     bitmap_mark (used_slots, idx);
-    for (uint32_t i = 0, sec = idx * SEC_PER_FRAME; i < SEC_PER_FRAME;
-         i++, sec++, page += BLOCK_SECTOR_SIZE)
-      {
-        block_write (swap_block, sec, page);
-      }
-    return idx;
   }
-  return (swap_idx)(-1);
+  // write the frame into the swap partition
+  for (uint32_t i = 0, sec = idx * SEC_PER_FRAME; i < SEC_PER_FRAME;
+       i++, sec++, page += BLOCK_SECTOR_SIZE)
+    {
+      block_write (swap_block, sec, page);
+    }
+  return idx;
 }
 
 void
 vm_swap_load (void *page, swap_idx idx)
 {
+  // swap must be enabled
+  ASSERT (swap_block);
   // should never evict kernel page
   ASSERT (page >= PHYS_BASE);
 
@@ -61,19 +67,21 @@ vm_swap_load (void *page, swap_idx idx)
   {
     // must present in swap partition
     ASSERT (bitmap_test (used_slots, idx));
-
     bitmap_reset (used_slots, idx);
-    for (uint32_t i = 0, sec = idx * SEC_PER_FRAME; i < SEC_PER_FRAME;
-         i++, sec++, page += BLOCK_SECTOR_SIZE)
-      {
-        block_read (swap_block, sec, page);
-      }
   }
+  // load frame from swap partition
+  for (uint32_t i = 0, sec = idx * SEC_PER_FRAME; i < SEC_PER_FRAME;
+       i++, sec++, page += BLOCK_SECTOR_SIZE)
+    {
+      block_read (swap_block, sec, page);
+    }
 }
 
 void
 vm_swap_discard (swap_idx idx)
 {
+  // swap must be enabled
+  ASSERT (swap_block);
   SWAP_CRITICAL
   {
     // must present in swap partition
@@ -89,7 +97,10 @@ vm_swap_discard (swap_idx idx)
 static swap_idx
 find_free_slot ()
 {
+  // swap must be enabled
+  ASSERT (swap_block);
   swap_idx idx = bitmap_scan (used_slots, 0, 1, false);
+  // FIXME: what to do when no space on swap partition?
   ASSERT (idx != BITMAP_ERROR);
   return idx;
 }

@@ -1,8 +1,5 @@
 #include "vm/sup_page.h"
 
-/* hash function operation*/
-static struct sup_page_entry *page_find_entry (struct hash *table,
-                                               void *upage);
 /* helper functions */
 static hash_hash_func page_hash_function;
 static hash_less_func page_less_function;
@@ -38,6 +35,7 @@ vm_sup_page_install_page (struct vm_sup_page_table *table, void *upage,
   entry->status = LOADED;
   entry->upage = upage;
   entry->kpage = kpage;
+  entry->swap_slot = 0;
   if (hash_insert (&table->hash_table, &entry->hash_elem) != NULL)
     {
       // Insertion failed, upage already exist
@@ -74,24 +72,15 @@ vm_sup_page_install_files (struct vm_sup_page_table *table UNUSED,
                            void *upage UNUSED)
 {
   /* TODO - Not implemented yet */
-  ASSERT (false);
-}
-
-bool
-vm_sup_page_remove_frame (struct vm_sup_page_table *table UNUSED,
-                          uint32_t *pd UNUSED, void *upage UNUSED)
-{
-  /* TODO - Not implemented yet */
-  ASSERT (false);
+  PANIC ("unimplemted: install page from file");
 }
 
 bool
 vm_sup_page_load_page (struct vm_sup_page_table *table, uint32_t *pd,
                        void *upage)
 {
-  struct sup_page_entry *entry = page_find_entry (&table->hash_table, upage);
-  // If the entry doesn't exist, there must be something wrong. Report the
-  // result.
+  struct sup_page_entry *entry = vm_sup_page_find_entry (table, upage);
+  // If the entry doesn't exist, there must be something wrong.
   if (entry == NULL)
     {
       return false;
@@ -114,15 +103,15 @@ vm_sup_page_load_page (struct vm_sup_page_table *table, uint32_t *pd,
       memset (kpage, 0, PGSIZE);
       break;
     case IN_FILE:
+      // ELF lazy load
       // TODO - Not implemented yet.
-      ASSERT (false)
+      PANIC ("ELF lazy load unimplemented");
       break;
     case ON_SWAP:
-      // TODO - Not implemented yet.
-      ASSERT (false);
+      vm_swap_load (kpage, entry->swap_slot);
       break;
     default:
-      ASSERT (false);
+      PANIC ("unreachable code");
       break;
     }
 
@@ -143,12 +132,12 @@ vm_sup_page_load_page (struct vm_sup_page_table *table, uint32_t *pd,
 
 /* Find the hash element with the given upage. Returns NULL if it doesn't
  * exist. */
-static struct sup_page_entry *
-page_find_entry (struct hash *table, void *upage)
+struct sup_page_entry *
+vm_sup_page_find_entry (struct vm_sup_page_table *table, void *upage)
 {
   struct sup_page_entry t;
   t.upage = upage;
-  struct hash_elem *e = hash_find (table, &t.hash_elem);
+  struct hash_elem *e = hash_find (&table->hash_table, &t.hash_elem);
   return hash_entry (e, struct sup_page_entry, hash_elem);
 }
 
@@ -178,6 +167,9 @@ page_destroy_function (struct hash_elem *e, void *aux UNUSED)
   // Free the frame
   if (n->kpage != NULL)
     vm_frame_free (n->kpage, false);
+  // discard the pages in SWAP
+  if (n->status == ON_SWAP)
+    vm_swap_discard (n->swap_slot);
   // Frae the entry
   free (n);
 }

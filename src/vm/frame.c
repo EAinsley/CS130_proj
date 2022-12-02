@@ -1,4 +1,17 @@
 #include "vm/frame.h"
+#include "debug.h"
+#include "threads/malloc.h"
+#include "threads/palloc.h"
+#include "threads/synch.h"
+#include "threads/vaddr.h"
+#include "userprog/pagedir.h"
+#include "userprog/syscall.h"
+#include "vm/swap.h"
+
+#define FRAME_CRITICAL                                                        \
+  for (int i = (lock_acquire (&frame_lock), 0); i < 1;                        \
+       lock_release (&frame_lock), i++)
+
 static struct lock frame_lock;
 /* The hash map for the node*/
 static struct hash frame_hash;
@@ -9,12 +22,15 @@ static struct list_elem *clock_pointer;
 static hash_hash_func page_hash_function;
 static hash_less_func page_less_function;
 
+static struct vm_frame *new_frame (void *kpage, void *upage,
+                                   struct thread *owner);
+
 /* The function to choose a frame to swap */
-static struct vm_frame_node *frame_get_victim (void);
+static struct vm_frame *frame_get_victim (void);
 static void vm_frame_clock_pointer_proceed (void);
 
-/* get the vm_frame_node according to the kpage */
-static struct vm_frame_node *frame_find_entry (void *kpage);
+/* get the vm_frame according to the kpage */
+static struct vm_frame *frame_find_entry (void *kpage);
 
 /* Init the global data*/
 void
@@ -25,43 +41,54 @@ vm_frame_init ()
   hash_init (&frame_hash, page_hash_function, page_less_function, NULL);
   clock_pointer = list_tail (&frame_list);
 }
+
 /* Allocate frame.
   Do not use this allocate pages for kernel process.
  */
 void *
 vm_frame_allocate (enum palloc_flags flags, void *page_addr)
 {
+  // Must contain PAL_USER
   ASSERT (flags & PAL_USER);
 
-  lock_acquire (&frame_lock);
-  // Must contain PAL_USER
   void *frame_page = palloc_get_page (flags);
-  // If no empty frame
+  // swap out a page
   if (frame_page == NULL)
+    FRAME_CRITICAL
     {
       // Try to get a page to evict
-      struct vm_frame_node *frame_evict UNUSED = frame_get_victim ();
-      /* TODO - swap the page */
-      /* NOTE - swap haven't been implemented yet, panic the kernel */
-      ASSERT (false);
+      struct vm_frame *victim = frame_get_victim ();
+      struct thread *owner = victim->owner;
+
+      // write down to swap
+      swap_idx swap_slot = vm_swap_save (victim->phy_addr);
+
+      // remove the page-frame mapping for the owner
+      pagedir_clear_page (owner->pagedir, victim->upage_addr);
+      struct sup_page_entry *entry = vm_sup_page_find_entry (
+          owner->supplemental_table, victim->upage_addr);
+      ASSERT (entry);
+      entry->status = ON_SWAP;
+      entry->kpage = NULL;
+      entry->swap_slot = swap_slot;
     }
-  // Allocate memory for the frame.
-  struct vm_frame_node *frame
-      = (struct vm_frame_node *)malloc (sizeof (struct vm_frame_node));
+
+  // Allocate memory for the frame struct
+  struct vm_frame *frame
+      = new_frame (frame_page, page_addr, thread_current ());
   // Allocation failed
   if (frame == NULL)
     {
-      // FIXME - This release should not be here.
-      lock_release (&frame_lock);
       return NULL;
     }
-  // Initialize the frame
-  frame->phy_addr = frame_page;
-  frame->upage_addr = page_addr;
-  hash_insert (&frame_hash, &frame->hash_elem);
-  list_insert (clock_pointer, &frame->list_elem);
 
-  lock_release (&frame_lock);
+  // add the newly allocated frame into present frame list
+  FRAME_CRITICAL
+  {
+    hash_insert (&frame_hash, &frame->hash_elem);
+    list_insert (clock_pointer, &frame->list_elem);
+  }
+
   return frame_page;
 }
 
@@ -87,7 +114,7 @@ vm_frame_free (void *kpage, bool free_resource)
   ASSERT (pg_ofs (kpage) == 0);
   // Find the addr
 
-  struct vm_frame_node *frame_to_be_freed = frame_find_entry (kpage);
+  struct vm_frame *frame_to_be_freed = frame_find_entry (kpage);
   if (frame_to_be_freed == NULL)
     {
       lock_release (&frame_lock);
@@ -111,18 +138,21 @@ vm_frame_free (void *kpage, bool free_resource)
  * algorithm. Described here:
  * https://en.wikipedia.org/wiki/Page_replacement_algorithm#Clock
  */
-static struct vm_frame_node *
+static struct vm_frame *
 frame_get_victim ()
 {
+  // need synchronization
+  ASSERT (lock_held_by_current_thread (&frame_lock));
+
   // In case all the frames are accessed. We have to use 2 * n to iterate
   // through the list twice
   // NOTE - (Or maybe n+1?).
   for (size_t i = 0; i < 2 * list_size (&frame_list); i++)
     {
       vm_frame_clock_pointer_proceed ();
-      struct vm_frame_node *frame
-          = list_entry (clock_pointer, struct vm_frame_node, list_elem);
-      // Give a seconde chance
+      struct vm_frame *frame
+          = list_entry (clock_pointer, struct vm_frame, list_elem);
+      // Give a second chance
       if (pagedir_is_accessed (thread_current ()->pagedir, frame->upage_addr))
         {
           pagedir_set_accessed (thread_current ()->pagedir, frame->upage_addr,
@@ -136,13 +166,13 @@ frame_get_victim ()
   return NULL;
 }
 
-static struct vm_frame_node *
+static struct vm_frame *
 frame_find_entry (void *kpage)
 {
-  struct vm_frame_node t;
+  struct vm_frame t;
   t.phy_addr = kpage;
   struct hash_elem *e = hash_find (&frame_hash, &t.hash_elem);
-  return hash_entry (e, struct vm_frame_node, hash_elem);
+  return hash_entry (e, struct vm_frame, hash_elem);
 }
 
 /* Update the clock pointer. The pointer go throught the list circularly.*/
@@ -164,7 +194,7 @@ vm_frame_clock_pointer_proceed (void)
 static unsigned int
 page_hash_function (const struct hash_elem *e, void *aux UNUSED)
 {
-  struct vm_frame_node *n = hash_entry (e, struct vm_frame_node, hash_elem);
+  struct vm_frame *n = hash_entry (e, struct vm_frame, hash_elem);
   return hash_int ((int)n->phy_addr);
 }
 
@@ -172,9 +202,21 @@ static bool
 page_less_function (const struct hash_elem *a, const struct hash_elem *b,
                     void *aux UNUSED)
 {
-  struct vm_frame_node *node_a
-      = hash_entry (a, struct vm_frame_node, hash_elem);
-  struct vm_frame_node *node_b
-      = hash_entry (b, struct vm_frame_node, hash_elem);
+  struct vm_frame *node_a = hash_entry (a, struct vm_frame, hash_elem);
+  struct vm_frame *node_b = hash_entry (b, struct vm_frame, hash_elem);
   return node_a->phy_addr < node_b->phy_addr;
+}
+
+static struct vm_frame *
+new_frame (void *kpage, void *upage, struct thread *owner)
+{
+  struct vm_frame *f = (struct vm_frame *)malloc (sizeof (struct vm_frame));
+  if (f)
+    {
+      memset ((void *)f, 0, sizeof (struct vm_frame));
+      f->owner = owner;
+      f->phy_addr = kpage;
+      f->upage_addr = upage;
+    }
+  return f;
 }
