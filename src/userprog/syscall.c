@@ -69,6 +69,7 @@ put_user (uint8_t *udst, uint8_t byte)
 void
 err_exit ()
 {
+  DEBUG_PRINT ("[invalid syscall] user program %s", thread_current ()->name);
   thread_current ()->proc->proc_status = PROC_ERROR_EXIT;
   SYSCALL_FN (exit) (-1);
 }
