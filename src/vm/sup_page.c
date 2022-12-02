@@ -131,7 +131,7 @@ vm_sup_page_load_page (struct vm_sup_page_table *table, uint32_t *pd,
         uint32_t len = entry->lazy_load.len;
         struct file *f = entry->lazy_load.f;
         entry->writable = entry->lazy_load.w;
-        printf ("load page %p, with permission %d\n", upage,
+        DEBUG_PRINT ("load page %p, with permission %d\n", upage,
                 (int)entry->writable);
 
         file_seek (f, ofs);

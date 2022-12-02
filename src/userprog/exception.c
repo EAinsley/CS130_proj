@@ -162,8 +162,8 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
 
-  printf ("[fault at] %p, page=%p; (u,w)=(%d,%d)\n", fault_addr, fault_page,
-          (int)user, (int)write);
+  DEBUG_PRINT ("[fault at] %p, page=%p; (u,w)=(%d,%d)\n", fault_addr,
+               fault_page, (int)user, (int)write);
 
   /* See section [3.1.5]
      a page fault in the kernel merely sets eax to 0xffffffff

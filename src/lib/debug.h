@@ -1,13 +1,19 @@
 #ifndef __LIB_DEBUG_H
 #define __LIB_DEBUG_H
 
-#define WITH_LOGGING 0
+#define DEBUG_MODE
 
-/* Evaluate an expression and print the value */
-#define LOG_EXPR(EXPR, FMT)                                                   \
-  if (WITH_LOGGING)                                                           \
-    printf ("[LOG %s@(%s:%d)] (%s) evaluates to (" #FMT ")\n", __FUNCTION__,  \
-            __FILE__, __LINE__, #EXPR, (EXPR));
+#ifdef DEBUG_MODE
+#define DEBUG_PRINT(...) printf (__VA_ARGS__)
+#else
+#define DEBUG_PRINT(...)                                                      \
+  do                                                                          \
+    {                                                                         \
+      break;                                                                  \
+      printf (__VA_ARGS__);                                                   \
+    }                                                                         \
+  while (0)
+#endif
 
 /* GCC lets us add "attributes" to functions, function
    parameters, etc. to indicate their properties.

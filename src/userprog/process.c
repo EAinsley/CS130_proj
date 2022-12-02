@@ -525,7 +525,7 @@ static bool
 load_segment (struct file *file, off_t ofs, uint8_t *upage,
               uint32_t read_bytes, uint32_t zero_bytes, bool writable)
 {
-  printf ("[load segement]: offset %d; upage %p\n", ofs, upage);
+  DEBUG_PRINT ("[load segement]: offset %d; upage %p\n", ofs, upage);
   ASSERT ((read_bytes + zero_bytes) % PGSIZE == 0);
   ASSERT (pg_ofs (upage) == 0);
   ASSERT (ofs % PGSIZE == 0);
@@ -661,12 +661,10 @@ prepare_stack (void **esp, char *name, char *args)
 
   // copy the command line onto stack
   esp_push_str (esp, args);
-  LOG_EXPR ((char *)*esp, "after push arg-str [%s]");
   // point to the start of command line string
   args = (char *)*esp;
 
   esp_push_str (esp, name);
-  LOG_EXPR ((char *)*esp, "after push name-str [%s]");
   argv[argc++] = (char *)*esp;
   // word align
   esp_push_align (esp);
@@ -683,17 +681,13 @@ prepare_stack (void **esp, char *name, char *args)
   for (int i = argc; i >= 0; i--)
     {
       esp_push_ptr (esp, argv[i]);
-      LOG_EXPR (*(char **)*esp, "%s");
     }
   // push pointer to the (argv array) onto stack
   esp_push_ptr (esp, *esp);
-  LOG_EXPR (*esp, "argv pointer = %p");
   // push argc onto stack
   esp_push_u32 (esp, argc);
-  LOG_EXPR (*(uint32_t *)*esp, "argc = %u");
   // push return address
   esp_push_ptr (esp, NULL);
-  LOG_EXPR (*(void **)*esp, "return addr = %p");
 }
 
 /* SECTION-END */
