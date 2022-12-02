@@ -165,16 +165,6 @@ page_fault (struct intr_frame *f)
   DEBUG_PRINT ("[fault at] %p, page=%p; (u,w)=(%d,%d)\n", fault_addr,
                fault_page, (int)user, (int)write);
 
-  /* See section [3.1.5]
-     a page fault in the kernel merely sets eax to 0xffffffff
-     and copies its former value into eip */
-  if (!user)
-    { // kernel mode
-      f->eip = (void *)f->eax;
-      f->eax = 0xffffffff;
-      return;
-    }
-
   // permission error, kill the process
   if (!not_present)
     goto END;
@@ -212,6 +202,16 @@ page_fault (struct intr_frame *f)
     return;
 
 END:
+  /* See section [3.1.5]
+   a page fault in the kernel merely sets eax to 0xffffffff
+   and copies its former value into eip */
+  if (!user)
+    { // kernel mode
+      f->eip = (void *)f->eax;
+      f->eax = 0xffffffff;
+      return;
+    }
+
   printf ("Page fault at %p: %s error %s page in %s context.\n", fault_addr,
           not_present ? "not present" : "rights violation",
           write ? "writing" : "reading", user ? "user" : "kernel");
