@@ -10,9 +10,6 @@
 #include <syscall-nr.h>
 
 #define SYSCALL_FN(name) sys__##name
-#define ATOMIC_FS_OP                                                          \
-  for (int i = (lock_acquire (&filesys_lock), 0); i < 1;                      \
-       lock_release (&filesys_lock), i++)
 
 /* Projects 2 and later. */
 static void SYSCALL_FN (halt) (void);
@@ -34,9 +31,6 @@ static void SYSCALL_FN (munmap) (mapid_t mapid);
 static void check_user_valid_string (const char *);
 static void check_user_valid_ptr (const void *);
 struct file *get_current_open_file (int fd);
-
-/* Locks for the filesystem */
-struct lock filesys_lock;
 
 /* Reads a byte at user virtual address UADDR.
    UADDR must be below PHYS_BASE.
@@ -71,7 +65,7 @@ put_user (uint8_t *udst, uint8_t byte)
 void
 err_exit ()
 {
-  DEBUG_PRINT ("[invalid syscall] user program %s", thread_current ()->name);
+  DEBUG_PRINT ("[invalid syscall] user program %s\n", thread_current ()->name);
   thread_current ()->proc->proc_status = PROC_ERROR_EXIT;
   SYSCALL_FN (exit) (-1);
 }
@@ -171,7 +165,6 @@ static void
 syscall_handler (struct intr_frame *f)
 {
   int id = syscall_arg (f, 0, int);
-  DEBUG_PRINT ("syscall id=%d", id);
 
   // save user prog ESP for potential page fault in syscall procedure.
   thread_current ()->userprog_syscall_esp = f->esp;
@@ -200,7 +193,6 @@ void
 syscall_init (void)
 {
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
-  lock_init (&filesys_lock);
 }
 
 /*
@@ -238,16 +230,14 @@ static bool
 SYSCALL_FN (create) (const char *file, unsigned initial_size)
 {
   check_user_valid_string (file);
-  bool result;
-  ATOMIC_FS_OP { result = filesys_create (file, initial_size); }
+  bool result = filesys_create (file, initial_size);
   return result;
 }
 static bool
 SYSCALL_FN (remove) (const char *file)
 {
   check_user_valid_string (file);
-  bool result = false;
-  ATOMIC_FS_OP { result = filesys_remove (file); }
+  bool result = filesys_remove (file);
   return result;
 }
 static int
@@ -256,8 +246,7 @@ SYSCALL_FN (open) (const char *file)
   int fd = -1;
   // Check if pointer is NULL
   check_user_valid_string (file);
-  struct file *fp = NULL;
-  ATOMIC_FS_OP { fp = filesys_open (file); }
+  struct file *fp = filesys_open (file);
   if (fp != NULL)
     {
       fd = fd_list_insert (&proc_current ()->fd_list, fp);
@@ -270,8 +259,7 @@ SYSCALL_FN (filesize) (int fd)
   struct file *f = fd_list_get_file (&proc_current ()->fd_list, fd);
   if (f == NULL)
     err_exit ();
-  int result = 0;
-  ATOMIC_FS_OP { result = file_length (f); }
+  int result = file_length (f);
   return result;
 }
 static int
@@ -294,8 +282,7 @@ SYSCALL_FN (read) (int fd, void *buffer, unsigned size)
     }
   // Read file
   struct file *fp = get_current_open_file (fd);
-  int result = 0;
-  ATOMIC_FS_OP { result = file_read (fp, buffer, size); }
+  int result = file_read (fp, buffer, size);
   return result;
 }
 
@@ -315,8 +302,7 @@ SYSCALL_FN (write) (int fd, const void *buffer, unsigned size)
   // Read file
   struct file *fp = get_current_open_file (fd);
   // Write file.
-  int result = 0;
-  ATOMIC_FS_OP { result = file_write (fp, buffer, size); }
+  int result = file_write (fp, buffer, size);
   return result;
 }
 static void
@@ -325,15 +311,14 @@ SYSCALL_FN (seek) (int fd, unsigned position)
   // Get file
   struct file *fp = get_current_open_file (fd);
   // Seek file
-  ATOMIC_FS_OP { file_seek (fp, position); }
+  file_seek (fp, position);
 }
 static unsigned
 SYSCALL_FN (tell) (int fd)
 {
   // Get file
   struct file *fp = get_current_open_file (fd);
-  unsigned pos = 0;
-  ATOMIC_FS_OP { pos = file_tell (fp); }
+  unsigned pos = file_tell (fp);
   return pos;
 }
 static void

@@ -162,8 +162,6 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
 
-  DEBUG_PRINT ("[fault at] %p, page=%p; (u,w)=(%d,%d)\n", fault_addr,
-               fault_page, (int)user, (int)write);
 
   // permission error, kill the process
   if (!not_present)
