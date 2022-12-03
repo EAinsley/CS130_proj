@@ -621,8 +621,8 @@ thread_mmap_list_remove (struct list *ml, mapid_t mapid)
         {
           vm_sup_page_unmap (t->supplemental_table, node->upage_addr,
                              node->pages_count);
-          free (node);
           list_remove (e);
+          free (node);
           return;
         }
       // Didn't find mapid

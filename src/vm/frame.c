@@ -151,8 +151,6 @@ frame_get_victim ()
   // need synchronization
   ASSERT (lock_held_by_current_thread (&frame_lock));
 
-  uint32_t *pd = thread_current ()->pagedir;
-
   // In case all the frames are accessed. We have to use 2 * n to iterate
   // through the list twice
   for (size_t i = 0; i < 2 * list_size (&frame_list); i++)
@@ -165,17 +163,9 @@ frame_get_victim ()
       if (frame->pin)
         continue;
 
+      uint32_t *pd = frame->owner->pagedir;
       if (!pagedir_is_accessed (pd, upage))
-        {
-          if (frame->phy_addr == NULL)
-            {
-              DEBUG_PRINT ("buggy page: owner:%s, kpage:%p, upage:%p \n",
-                           frame->owner->name, frame->phy_addr,
-                           frame->upage_addr);
-              PANIC ("WTF");
-            }
-          return frame;
-        }
+        return frame;
       else
         // Give a second chance
         pagedir_set_accessed (pd, upage, false);

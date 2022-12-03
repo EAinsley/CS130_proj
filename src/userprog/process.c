@@ -837,13 +837,7 @@ fd_list_get_file (struct list *fl, int fd)
     {
       struct fd_node *node = list_entry (e, struct fd_node, fd_elem);
       if (fd == node->fd)
-        {
-          return node->f;
-        }
-      else if (fd > node->fd)
-        {
-          return NULL;
-        }
+        return node->f;
     }
   return NULL;
 }
