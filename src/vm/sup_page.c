@@ -110,6 +110,7 @@ vm_sup_page_map (struct vm_sup_page_table *table, void *upage, struct file *f,
   if (!entry)
     return false;
   entry->mapped = true;
+  return true;
 }
 void
 vm_sup_page_unmap (struct vm_sup_page_table *table, void *upage_begin,
