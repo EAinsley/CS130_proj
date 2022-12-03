@@ -1,0 +1,67 @@
+\section*{PAGING TO AND FROM DISK}
+
+\begin{aspect}{DATA STRUCTURES}
+
+	\begin{qc}
+		B1: Copy here the declaration of each new or changed \lstinline{struct} or member,
+		global or static variable, \lstinline{typedef}, or enumeration.
+		Identify the purpose of each in 25 words or less.
+	\end{qc}
+
+\end{aspect}
+
+\begin{aspect}{ALGORITHMS}
+	\begin{qc}
+		B2: When a frame is required but none is free, some frame must be
+		evicted.  Describe your code for choosing a frame to evict.
+	\end{qc}
+
+	\begin{qc}
+		B3: When a process $P$ obtains a frame that was previously used by a process $Q$,
+		how do you adjust the page table (and any other data structures) to reflect the frame $Q$ no longer has?
+	\end{qc}
+
+	\begin{qc}
+		B4: Explain your heuristic for deciding whether a page fault for an invalid virtual address
+		should cause the stack to be extended into the page that faulted.
+	\end{qc}
+
+\end{aspect}
+
+\begin{aspect}{SYNCHRONIZATION}
+	\begin{qc}
+		B5: Explain the basics of your VM synchronization design.
+		In particular, explain how it prevents deadlock.
+		(Refer to the textbook for an explanation of the necessary conditions for deadlock.)
+	\end{qc}
+
+	\begin{qc}
+		B6: A page fault in process $P$ can cause another process $Q$'s frame to be evicted.
+		How do you ensure that $Q$ cannot access or modify the page during the eviction process?
+		How do you avoid a race between $P$ evicting $Q$'s frame and $Q$ faulting the page back in?
+	\end{qc}
+
+	\begin{qc}
+		B7: Suppose a page fault in process $P$ causes a page to be read from the file system or swap.
+		How do you ensure that a second process $Q$ cannot interfere
+		by e.g. attempting to evict the frame while it is still being read in?
+	\end{qc}
+
+	\begin{qc}
+		B8: Explain how you handle access to paged-out pages that occur during system calls.
+		Do you use page faults to bring in pages (as in user programs),
+		or do you have a mechanism for ``locking'' frames into physical memory,
+		or do you use some other design?
+		How do you gracefully handle attempted accesses to invalid virtual addresses?
+	\end{qc}
+\end{aspect}
+
+
+\begin{aspect}{RATIONALE}
+	\begin{qc}
+		B9: A single lock for the whole VM system would make synchronization easy, but limit parallelism.
+		On the other hand, using many locks complicates synchronization and raises the
+		possibility for deadlock but allows for high parallelism.
+		Explain where your design falls along this continuum and why you chose to design it this way.
+	\end{qc}
+\end{aspect}

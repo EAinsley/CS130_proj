@@ -1,0 +1,35 @@
+\section*{MEMORY MAPPED FILES}
+
+\begin{aspect}{DATA STRUCTURES}
+	\begin{qc}
+		C1: Copy here the declaration of each new or changed \lstinline{struct} or member,
+		global or static variable, \lstinline{typedef}, or enumeration.
+		Identify the purpose of each in 25 words or less.
+	\end{qc}
+
+\end{aspect}
+
+
+\begin{aspect}{ALGORITHMS}
+	\begin{qc}
+		C2: Describe how memory mapped files integrate into your virtual memory subsystem.
+		Explain how the page fault and eviction processes differ between swap pages and other pages.
+	\end{qc}
+
+	\begin{qc}
+		C3: Explain how you determine whether a new file mapping overlaps any existing segment.
+	\end{qc}
+
+\end{aspect}
+
+\begin{aspect}{RATIONALE}
+	\begin{qc}
+		C4: Mappings created with \lstinline{mmap} have similar semantics to those of data demand-paged from executables,
+		except that \lstinline{mmap} mappings are written back to their original files, not to swap.
+		This implies that much of their implementation can be shared.
+		Explain why your implementation either does or does not share much of the code for the two situations.
+	\end{qc}
+
+\end{aspect}
+
+
