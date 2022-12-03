@@ -103,4 +103,7 @@ bool vm_sup_page_map (struct vm_sup_page_table *table, void *upage,
 void vm_sup_page_unmap (struct vm_sup_page_table *table, void *upage_begin,
                         uint32_t pages);
 
+/* writeback a mmap page */
+void vm_sup_page_writeback (struct sup_page_entry *entry);
+
 #endif // SUP_PAGE_H
