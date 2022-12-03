@@ -86,11 +86,12 @@ vm_frame_allocate (enum palloc_flags flags, void *page_addr)
         entry->swap_slot = swap_slot;
 
         // reuse the frame
-        victim->owner = thread_current ();
-        victim->upage_addr = page_addr;
-        frame_page = victim->phy_addr;
+        frame = victim;
+        frame->owner = thread_current ();
+        frame->upage_addr = page_addr;
+        frame_page = frame->phy_addr;
+        // clear the frame, wait for loading data into it
         memset (frame_page, 0, PGSIZE);
-
         frame->pin = true;
       }
     }
