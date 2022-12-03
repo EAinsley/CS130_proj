@@ -28,6 +28,8 @@ static int SYSCALL_FN (write) (int fd, const void *buffer, unsigned size);
 static void SYSCALL_FN (seek) (int fd, unsigned position);
 static unsigned SYSCALL_FN (tell) (int fd);
 static void SYSCALL_FN (close) (int fd);
+static mapid_t SYSCALL_FN (mmap) (int fd, void *addr);
+static void SYSCALL_FN (munmap) (mapid_t mapid);
 
 static void check_user_valid_string (const char *);
 static void check_user_valid_ptr (const void *);
@@ -188,6 +190,8 @@ syscall_handler (struct intr_frame *f)
   FWD_CASE (SYS_SEEK, FWD2 (seek, int, unsigned));
   FWD_CASE (SYS_TELL, FWD1_RET (tell, int));
   FWD_CASE (SYS_CLOSE, FWD1 (close, int));
+  FWD_CASE (SYS_MMAP, FWD2_RET (mmap, int, void *));
+  FWD_CASE (SYS_MUNMAP, FWD1 (munmap, mapid_t));
 
   // invalid system call
   err_exit ();
@@ -336,6 +340,30 @@ static void
 SYSCALL_FN (close) (int fd)
 {
   fd_list_remove (&proc_current ()->fd_list, fd);
+}
+
+static mapid_t
+SYSCALL_FN (mmap) (int fd, void *addr)
+{
+  // check_user_valid_ptr (addr);
+  struct file *fp = get_current_open_file (fd);
+  off_t length = 0;
+  ATOMIC_FS_OP { length = file_length (fp); }
+  // Check integrity.
+  // See
+  // https://alfredthiel.gitbook.io/pintosbook/project-description/lab3b-mmap-files/your-tasks#:~:text=A%20call,mappable
+  bool valid = fd > 1 && length > 0 && addr && pg_ofs (addr) == 0;
+  if (!valid)
+    return -1;
+  // Try map
+  struct file *valid_fp = file_reopen (fp);
+  // Allcate mapid
+}
+static void
+SYSCALL_FN (munmap) (mapid_t mapid)
+{
+  // Check integrity and try find mapid
+  // Try to unmap
 }
 
 /* Check whether the string is valid in user space */
