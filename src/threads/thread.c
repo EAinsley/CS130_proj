@@ -573,17 +573,28 @@ thread_schedule_tail (struct thread *prev)
 
 /* clear the mmap list, release all the resources */
 void
-thread_mmap_list_clear (struct list *mmap_list)
+thread_mmap_list_clear (struct list *ml)
 {
-  PANIC ("NOT implemented yet.");
+  DEBUG_PRINT ("claer thread mmap list");
+  struct thread *t = thread_current ();
+  while (!list_empty (ml))
+    {
+      struct list_elem *e = list_pop_front (ml);
+      struct thread_mmap_node *mmap_node
+          = list_entry (e, struct thread_mmap_node, list_elem);
+      vm_sup_page_unmap (t->supplemental_table, mmap_node->upage_addr,
+                         mmap_node->pages_count);
+      free (mmap_node);
+    }
+  DEBUG_PRINT ("thread mmap list cleared");
 }
 /* Insert new mmap files into the list and return the mapid*/
 mapid_t
-thread_mmap_list_insert (struct list *ml, void *upage_addr, struct file *mf)
+thread_mmap_list_insert (struct list *ml, void *upage_addr, uint32_t count)
 {
   struct thread_mmap_node *node
       = (struct thread_mmap_node *)malloc (sizeof (struct thread_mmap_node));
-  node->mapped_file = mf;
+  node->pages_count = count;
   node->upage_addr = upage_addr;
   node->mapid = 0;
   struct list_elem *e = list_begin (ml);
@@ -600,6 +611,7 @@ thread_mmap_list_insert (struct list *ml, void *upage_addr, struct file *mf)
 void
 thread_mmap_list_remove (struct list *ml, mapid_t mapid)
 {
+  struct thread *t = thread_current ();
   for (struct list_elem *e = list_begin (ml); e != list_end (ml);
        e = list_next (e))
     {
@@ -607,10 +619,16 @@ thread_mmap_list_remove (struct list *ml, mapid_t mapid)
           = list_entry (e, struct thread_mmap_node, list_elem);
       if (mapid == node->mapid)
         {
-          // TODO - remove node
+          vm_sup_page_unmap (t->supplemental_table, node->upage_addr,
+                             node->pages_count);
           free (node);
           list_remove (e);
           return;
+        }
+      // Didn't find mapid
+      if (node->mapid > mapid)
+        {
+          break;
         }
     }
 }

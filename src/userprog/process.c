@@ -220,6 +220,7 @@ process_exit (void)
    directory will be one that's been freed (and cleared).
    */
 #ifdef VM
+  thread_mmap_list_clear (&cur->mmap_list);
   vm_sup_page_destroy (cur->supplemental_table);
 #endif
   uint32_t *pd = cur->pagedir;
