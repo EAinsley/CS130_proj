@@ -333,7 +333,7 @@ SYSCALL_FN (mmap) (int fd, void *addr)
   // check_user_valid_ptr (addr);
   struct file *fp = get_current_open_file (fd);
   off_t length = 0;
-  ATOMIC_FS_OP { length = file_length (fp); }
+  length = file_length (fp);
   // Check integrity.
   // See
   // https://alfredthiel.gitbook.io/pintosbook/project-description/lab3b-mmap-files/your-tasks#:~:text=A%20call,mappable
@@ -342,11 +342,8 @@ SYSCALL_FN (mmap) (int fd, void *addr)
     return -1;
   // Reopen the file
   struct thread *t = thread_current ();
-  ATOMIC_FS_OP
-  {
-    fp = file_reopen (fp);
-    length = file_length (fp);
-  }
+  fp = file_reopen (fp);
+  length = file_length (fp);
   // Check the integrity again
   if (fp == NULL || length == 0)
     return -1;
