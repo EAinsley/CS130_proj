@@ -53,12 +53,14 @@ vm_swap_save (void *page)
     {
       block_write (swap_block, sec, page);
     }
+  DEBUG_PRINT ("[VM.SWAP] save k-page at %p finished\n", page);
   return idx;
 }
 
 void
 vm_swap_load (void *page, swap_idx idx)
 {
+  DEBUG_PRINT ("[VM.SWAP] load k-page for %p from %u\n", page, idx);
   // swap must be enabled
   ASSERT (swap_block);
   // should never evict kernel page
@@ -76,6 +78,7 @@ vm_swap_load (void *page, swap_idx idx)
     {
       block_read (swap_block, sec, page);
     }
+  DEBUG_PRINT ("[VM.SWAP] load k-page for %p from %u. finished\n", page, idx);
 }
 
 void
