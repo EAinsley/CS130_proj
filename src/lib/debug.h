@@ -1,7 +1,7 @@
 #ifndef __LIB_DEBUG_H
 #define __LIB_DEBUG_H
 
-#define DEBUG_MODE
+// #define DEBUG_MODE
 
 #ifdef DEBUG_MODE
 #define DEBUG_PRINT(...) printf (__VA_ARGS__)
