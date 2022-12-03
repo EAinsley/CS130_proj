@@ -69,7 +69,7 @@ put_user (uint8_t *udst, uint8_t byte)
 void
 err_exit ()
 {
-  DEBUG_PRINT ("[invalid syscall] user program %s", thread_current ()->name);
+  DEBUG_PRINT ("[invalid syscall] user program %s\n", thread_current ()->name);
   thread_current ()->proc->proc_status = PROC_ERROR_EXIT;
   SYSCALL_FN (exit) (-1);
 }
@@ -169,7 +169,7 @@ static void
 syscall_handler (struct intr_frame *f)
 {
   int id = syscall_arg (f, 0, int);
-  DEBUG_PRINT ("syscall id=%d", id);
+  DEBUG_PRINT ("syscall id=%d\n", id);
 
   // save user prog ESP for potential page fault in syscall procedure.
   thread_current ()->userprog_syscall_esp = f->esp;
