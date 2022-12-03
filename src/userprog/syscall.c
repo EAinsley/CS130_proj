@@ -355,9 +355,37 @@ SYSCALL_FN (mmap) (int fd, void *addr)
   bool valid = fd > 1 && length > 0 && addr && pg_ofs (addr) == 0;
   if (!valid)
     return -1;
-  // Try map
-  struct file *valid_fp = file_reopen (fp);
+  // Reopen the file
+  struct thread *t = thread_current ();
+  ATOMIC_FS_OP
+  {
+    fp = file_reopen (fp);
+    length = file_length (fp);
+  }
+  // Check the integrity again
+  if (fp == NULL || length == 0)
+    return -1;
+  // All the frames should not be mapped already.
+  for (int ofs = 0; ofs < length; ofs += PGSIZE)
+    {
+      if (vm_sup_page_find_entry (t->supplemental_table, addr + ofs) != NULL)
+        return -1;
+    }
+
+  // Ok. Map the files.
+  for (int ofs = 0; ofs < length; ofs += PGSIZE)
+    {
+      uint32_t read_bytes
+          = ofs + PGSIZE > length ? ofs + PGSIZE - length : PGSIZE;
+      if (!vm_sup_page_install_files (t->supplemental_table, addr + ofs, fp,
+                                      ofs, read_bytes, true))
+        {
+          // We should clear up the memory...?
+          return -1;
+        }
+    }
   // Allcate mapid
+  return thread_mmap_list_insert (&t->mmap_list, addr, fp);
 }
 static void
 SYSCALL_FN (munmap) (mapid_t mapid)
