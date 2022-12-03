@@ -167,9 +167,9 @@ struct thread *thread_find (tid_t id);
 
 struct thread_mmap_node
 {
-  mapid_t mapid;            // The allocated mapid
-  void *upage_addr;         // The start upage addr the file maps to
-  struct file *mapped_file; // The mapped file;
+  mapid_t mapid;    // The allocated mapid
+  void *upage_addr; // The start upage addr the file maps to
+  uint32_t pages_count;
   struct list_elem list_elem;
 };
 
@@ -177,7 +177,7 @@ struct thread_mmap_node
 void thread_mmap_list_clear (struct list *mmap_list);
 /* Insert new mmap files into the list and return the mapid*/
 mapid_t thread_mmap_list_insert (struct list *ml, void *upage_addr,
-                                 struct file *mf);
+                                 uint32_t count);
 /* unmap the mapped file and free the resource. */
 void thread_mmap_list_remove (struct list *ml, mapid_t mapid);
 #endif /* threads/thread.h */
