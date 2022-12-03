@@ -25,6 +25,9 @@ vm_sup_page_destroy (struct vm_sup_page_table *page_table)
   hash_destroy (&page_table->hash_table, page_destroy_function);
 }
 
+/* writeback a mmap page */
+static void map_page_writeback (struct sup_page_entry *entry);
+
 bool
 vm_sup_page_install_page (struct vm_sup_page_table *table, void *upage,
                           void *kpage)
@@ -96,6 +99,42 @@ vm_sup_page_install_files (struct vm_sup_page_table *table, void *upage,
       return false;
     }
   return true;
+}
+
+bool
+vm_sup_page_map (struct vm_sup_page_table *table, void *upage, struct file *f,
+                 off_t ofs, uint32_t bytes)
+{
+  vm_sup_page_install_files (table, upage, f, ofs, bytes, true);
+  struct sup_page_entry *entry = vm_sup_page_find_entry (table, upage);
+  if (!entry)
+    return false;
+  entry->mapped = true;
+}
+void
+vm_sup_page_unmap (struct vm_sup_page_table *table, void *upage_begin,
+                   uint32_t pages)
+{
+  ASSERT (table);
+  uint32_t *pd = thread_current ()->pagedir;
+  void *upage = upage_begin;
+  for (uint32_t i = 0; i < pages; i++, upage += PGSIZE)
+    {
+      struct sup_page_entry *entry = vm_sup_page_find_entry (table, upage);
+      ASSERT (entry && entry->mapped && entry->lazy_load.f);
+      hash_delete (&table->hash_table, &entry->hash_elem);
+
+      // probably need writeback
+      if (pagedir_is_dirty (pd, upage))
+        map_page_writeback (entry);
+
+      // the last page of the mapping section, close the file
+      if (i + 1 == pages)
+        file_close (entry->lazy_load.f);
+
+      // deallocate the vm-sup-page-tbl entry
+      free (entry);
+    }
 }
 
 bool
@@ -200,6 +239,9 @@ static void
 page_destroy_function (struct hash_elem *e, void *aux UNUSED)
 {
   struct sup_page_entry *n = hash_entry (e, struct sup_page_entry, hash_elem);
+  // caller make sure that map sections are removed before sup-table destory
+  ASSERT (!n->mapped);
+
   // Free the frame
   if (n->kpage != NULL)
     vm_frame_free (n->kpage, false);
@@ -215,6 +257,16 @@ vm_ste_new ()
 {
   struct sup_page_entry *entry
       = (struct sup_page_entry *)calloc (sizeof (struct sup_page_entry), 1);
+  // pages are writable by default
   entry->writable = true;
   return entry;
+}
+
+static void
+map_page_writeback (struct sup_page_entry *entry)
+{
+  ASSERT (entry && entry->mapped && entry->lazy_load.f);
+  struct file *f = entry->lazy_load.f;
+  file_seek (f, entry->lazy_load.ofs);
+  file_write (f, entry->kpage, entry->lazy_load.len);
 }

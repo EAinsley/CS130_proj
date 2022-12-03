@@ -27,6 +27,10 @@ struct vm_sup_page_table
 
 struct lazy_load_page
 {
+  /* if mapped==true:
+     - evict/destory AND dirty  => write back
+     - unmap AND last_map_page => close file
+   */
   struct file *f;
   off_t ofs;
   uint32_t len;
@@ -45,9 +49,12 @@ struct sup_page_entry
   /* permission */
   bool writable;
 
+  /* whether this page is a memory-file mapping */
+  bool mapped;
+
   /*
   a lazy load page from the ELF executable file
-  Only applicable when status==IN_FILE
+  Only applicable when `status==IN_FILE ||`
   */
   struct lazy_load_page lazy_load;
 
@@ -79,4 +86,21 @@ bool vm_sup_page_load_page (struct vm_sup_page_table *table, uint32_t *pd,
 /* hash function operation*/
 struct sup_page_entry *vm_sup_page_find_entry (struct vm_sup_page_table *table,
                                                void *upage);
+
+/*
+  add a mmap page in the page-table.
+
+  - fill the last `PGSIZE-bytes` bytes in the page to zero when loading.
+  - only write back `bytes` bytes in the beginning of this page
+ */
+bool vm_sup_page_map (struct vm_sup_page_table *table, void *upage,
+                      struct file *f, off_t ofs, uint32_t bytes);
+/*
+  remove a mmap section in the page-table
+  `upage_begin` is the first mapped page,
+  also close the mapping file
+*/
+void vm_sup_page_unmap (struct vm_sup_page_table *table, void *upage_begin,
+                        uint32_t pages);
+
 #endif // SUP_PAGE_H
