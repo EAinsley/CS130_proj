@@ -358,8 +358,8 @@ SYSCALL_FN (mmap) (int fd, void *addr)
   uint32_t pages_count = 0;
   for (int ofs = 0; ofs < length; ofs += PGSIZE)
     {
-      uint32_t read_bytes
-          = ofs + PGSIZE > length ? ofs + PGSIZE - length : PGSIZE;
+      uint32_t read_bytes = length - ofs;
+      read_bytes = read_bytes > PGSIZE ? PGSIZE : read_bytes;
       if (!vm_sup_page_map (t->supplemental_table, addr + ofs, fp, ofs,
                             read_bytes))
         {
