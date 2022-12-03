@@ -161,6 +161,9 @@ frame_get_victim ()
           = list_entry (clock_pointer, struct vm_frame, list_elem);
       void *upage = frame->upage_addr;
 
+      if (frame->pin)
+        continue;
+
       if (!pagedir_is_accessed (pd, upage))
         {
           if (frame->phy_addr == NULL)
@@ -178,6 +181,18 @@ frame_get_victim ()
     }
   PANIC ("[VM.FRAME] can evict no frame");
   return NULL;
+}
+
+void
+vm_frame_pin_upd (void *kpage, bool pin)
+{
+  ASSERT (kpage);
+  FRAME_CRITICAL
+  {
+    struct vm_frame *frame = frame_find_entry (kpage);
+    ASSERT (frame);
+    frame->pin = pin;
+  }
 }
 
 static struct vm_frame *
@@ -227,7 +242,6 @@ new_frame (void *kpage, void *upage, struct thread *owner)
   struct vm_frame *f = (struct vm_frame *)calloc (sizeof (struct vm_frame), 1);
   if (f)
     {
-      memset ((void *)f, 0, sizeof (struct vm_frame));
       f->owner = owner;
       f->phy_addr = kpage;
       f->upage_addr = upage;

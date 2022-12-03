@@ -164,6 +164,7 @@ vm_sup_page_load_page (struct vm_sup_page_table *table, uint32_t *pd,
   // Finale
   entry->kpage = kpage;
   entry->status = LOADED;
+  vm_frame_pin_upd (kpage, false);
   return true;
 }
 

@@ -600,6 +600,8 @@ install_page (void *upage, void *kpage, bool writable)
 #ifdef VM
   success = success
             && vm_sup_page_install_page (t->supplemental_table, upage, kpage);
+  if (success)
+    vm_frame_pin_upd (kpage, false);
 #endif
   return success;
 }

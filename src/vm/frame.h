@@ -25,6 +25,8 @@ struct vm_frame
   struct list_elem list_elem;
 };
 
+void vm_frame_pin_upd (void *kpage, bool pin);
+
 void vm_frame_init (void);
 void *vm_frame_allocate (enum palloc_flags flags, void *upage);
 void vm_frame_free (void *kpage, bool free_resource);
