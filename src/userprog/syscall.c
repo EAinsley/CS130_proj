@@ -355,25 +355,27 @@ SYSCALL_FN (mmap) (int fd, void *addr)
     }
 
   // Ok. Map the files.
+  uint32_t pages_count = 0;
   for (int ofs = 0; ofs < length; ofs += PGSIZE)
     {
       uint32_t read_bytes
           = ofs + PGSIZE > length ? ofs + PGSIZE - length : PGSIZE;
-      if (!vm_sup_page_install_files (t->supplemental_table, addr + ofs, fp,
-                                      ofs, read_bytes, true))
+      if (!vm_sup_page_map (t->supplemental_table, addr + ofs, fp, ofs,
+                            read_bytes, true))
         {
           // We should clear up the memory...?
+          vm_sup_page_unmap (t->supplemental_table, addr, pages_count);
           return -1;
         }
+      pages_count += 1;
     }
   // Allcate mapid
-  return thread_mmap_list_insert (&t->mmap_list, addr, fp);
+  return thread_mmap_list_insert (&t->mmap_list, addr, pages_count);
 }
 static void
 SYSCALL_FN (munmap) (mapid_t mapid)
 {
-  // Check integrity and try find mapid
-  // Try to unmap
+  thread_mmap_list_remove (&thread_current ()->mmap_list, mapid);
 }
 
 /* Check whether the string is valid in user space */
