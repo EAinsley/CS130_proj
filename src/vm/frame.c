@@ -1,6 +1,7 @@
 #include "vm/frame.h"
 #include "debug.h"
 #include "stdio.h"
+#include "threads/interrupt.h"
 #include "threads/malloc.h"
 #include "threads/palloc.h"
 #include "threads/synch.h"
@@ -77,10 +78,14 @@ vm_frame_allocate (enum palloc_flags flags, void *page_addr)
         swap_idx swap_slot = vm_swap_save (victim->phy_addr);
 
         // remove the page-frame mapping for the owner
-        pagedir_clear_page (owner_old->pagedir, victim->upage_addr);
         struct sup_page_entry *entry = vm_sup_page_find_entry (
             owner_old->supplemental_table, victim->upage_addr);
         ASSERT (entry);
+        // if the evicted frame is a mmap page, writeback
+        if (entry->mapped
+            && pagedir_is_dirty (owner_old->pagedir, entry->upage))
+          vm_sup_page_writeback (entry);
+        pagedir_clear_page (owner_old->pagedir, victim->upage_addr);
         entry->status = ON_SWAP;
         entry->kpage = NULL;
         entry->swap_slot = swap_slot;
@@ -148,12 +153,15 @@ vm_frame_free (void *kpage, bool free_resource)
 static struct vm_frame *
 frame_get_victim ()
 {
+  DEBUG_PRINT ("need to evict one page");
   // need synchronization
   ASSERT (lock_held_by_current_thread (&frame_lock));
 
+  enum intr_level old_level = intr_disable ();
+
   // In case all the frames are accessed. We have to use 2 * n to iterate
   // through the list twice
-  for (size_t i = 0; i < 2 * list_size (&frame_list); i++)
+  for (size_t i = 0, len = 2 * list_size (&frame_list); i < len; i++)
     {
       vm_frame_clock_pointer_proceed ();
       struct vm_frame *frame
@@ -162,14 +170,20 @@ frame_get_victim ()
 
       if (frame->pin)
         continue;
-
       uint32_t *pd = frame->owner->pagedir;
+      ASSERT (pd != NULL);
       if (!pagedir_is_accessed (pd, upage))
-        return frame;
+        {
+          intr_set_level (old_level);
+          return frame;
+        }
       else
-        // Give a second chance
-        pagedir_set_accessed (pd, upage, false);
+        {
+          // Give a second chance
+          pagedir_set_accessed (pd, upage, false);
+        }
     }
+  intr_set_level (old_level);
   PANIC ("[VM.FRAME] can evict no frame");
   return NULL;
 }
@@ -200,15 +214,10 @@ static void
 vm_frame_clock_pointer_proceed (void)
 {
   ASSERT (!list_empty (&frame_list));
-  if (clock_pointer == list_tail (&frame_list)
-      || clock_pointer == list_end (&frame_list))
-    {
-      clock_pointer = list_begin (&frame_list);
-    }
-  else
-    {
-      clock_pointer = list_next (clock_pointer);
-    }
+  if (clock_pointer != list_end (&frame_list))
+    clock_pointer = list_next (clock_pointer);
+  if (clock_pointer == list_end (&frame_list))
+    clock_pointer = list_begin (&frame_list);
 }
 
 static unsigned int

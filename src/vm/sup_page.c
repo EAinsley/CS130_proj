@@ -25,8 +25,6 @@ vm_sup_page_destroy (struct vm_sup_page_table *page_table)
   hash_destroy (&page_table->hash_table, page_destroy_function);
 }
 
-/* writeback a mmap page */
-static void map_page_writeback (struct sup_page_entry *entry);
 
 bool
 vm_sup_page_install_page (struct vm_sup_page_table *table, void *upage,
@@ -127,7 +125,13 @@ vm_sup_page_unmap (struct vm_sup_page_table *table, void *upage_begin,
 
       // probably need writeback
       if (pagedir_is_dirty (pd, upage))
-        map_page_writeback (entry);
+        vm_sup_page_writeback (entry);
+
+      pagedir_clear_page (pd, upage);
+      if (entry->kpage != NULL)
+        vm_frame_free (entry->kpage, true);
+      if (entry->status == ON_SWAP)
+        vm_swap_discard (entry->swap_slot);
 
       // the last page of the mapping section, close the file
       if (i + 1 == pages)
@@ -263,8 +267,8 @@ vm_ste_new ()
   return entry;
 }
 
-static void
-map_page_writeback (struct sup_page_entry *entry)
+void
+vm_sup_page_writeback (struct sup_page_entry *entry)
 {
   ASSERT (entry && entry->mapped && entry->lazy_load.f);
   struct file *f = entry->lazy_load.f;
