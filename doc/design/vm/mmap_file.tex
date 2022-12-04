@@ -7,6 +7,31 @@
 		Identify the purpose of each in 25 words or less.
 	\end{qc}
 
+	In \lstinline{threads/thread.h}
+	\begin{lstlisting}
+struct thread
+{
+  struct list mmap_list; // list used to record mmap information
+};
+
+/* one record in mmap_list: a successfully established memory-file mapping */
+struct thread_mmap_node
+{
+  mapid_t mapid; // The allocated mapid
+  void *upage_addr; // The first mapped user page address
+  uint32_t pages_count; // number of pages in the mapping: ceil(file_length/page_size)
+  struct list_elem list_elem; // chain the nodes in mmap_list
+};
+			\end{lstlisting}
+	In \lstinline{vm/sup_page.c}
+	\begin{lstlisting}
+struct sup_page_entry
+{
+  /* whether this page is a memory-file mapping */
+  bool mapped;
+}
+	\end{lstlisting}
+	We also reuses the \lstinline{struct lazy_load_page} in supplemental table entry.
 \end{aspect}
 
 
@@ -15,11 +40,18 @@
 		C2: Describe how memory mapped files integrate into your virtual memory subsystem.
 		Explain how the page fault and eviction processes differ between swap pages and other pages.
 	\end{qc}
+	See \lstinline{vm_sup_page_map}, \lstinline{vm_sup_page_unmap} and \lstinline{vm_sup_page_writeback}i in \lstinline{vm/sup_page.c}.\\
+	Memory-mapped pages are similar to ELF lazy load pages:
+	we simply add a few supplemental page table entry with \lstinline{mapped=true} for the mapped pages to record the mapped file and the offset.
+	When a recoverable page-fault happens, we allocate a frame and read the contents from the mapped file.\\
+
+	When evicting a mapped page, we write the page back to file if the dirty bit in page directory is set and clears the dirty bit.\\
 
 	\begin{qc}
 		C3: Explain how you determine whether a new file mapping overlaps any existing segment.
 	\end{qc}
-
+	When loading or extending a segment of the user process, we add a lazy load entry in the supplemental page table which will never be removed until the program exits.
+	For every mapped page to be created, we check to see if a table entry already exists at that address.
 \end{aspect}
 
 \begin{aspect}{RATIONALE}
@@ -29,7 +61,11 @@
 		This implies that much of their implementation can be shared.
 		Explain why your implementation either does or does not share much of the code for the two situations.
 	\end{qc}
+	Our implementation of \lstinline{mmap} reuses the code for \lstinline{load}: See \lstinline{vm/sup_page.c}.\\
+	The \lstinline{vm_sup_page_map} is forwarded to \lstinline{vm_sup_page_install_files} which is used in ELF lazy load.
+	We also set the table entry \lstinline{mapped} field to \lstinline{true} to indicate that this page is created by \lstinline{mmap}.\\
 
+	We adopt the philosophy of \emph{never repeat yourself}.
+	Writing similar code multiple times is a waste of time and might introduce unexpected bugs.
 \end{aspect}
-
 
