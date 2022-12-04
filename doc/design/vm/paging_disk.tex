@@ -8,23 +8,86 @@
 		Identify the purpose of each in 25 words or less.
 	\end{qc}
 
+
+	In \lstinline{vm/swap.h} and \lstinline{vm/swap.c}.
+	\begin{lstlisting}
+/* used to index the sectors of a swap-out page in SWAP block: sector [8*swap_idx,8*swap_idx +7] */
+typedef uint32_t swap_idx;
+
+static struct block *swap_block; // the block device whose ROLE is SWAP, used as swap partition
+static struct bitmap *used_slots; // a bitmap used to track used/unused sectors in swap partition
+static struct lock swap_lock; // prevent data race on used_slot bitmap. NOTE: block device has internal synchronization.
+static const uint32_t SEC_PER_FRAME = PGSIZE / BLOCK_SECTOR_SIZE; // number of sectors used to store one page
+\end{lstlisting}
+
+In \lstinline{vm/frame.h} and \lstinline{vm/frame.c}.
+	\begin{lstlisting}
+struct vm_frame
+{
+/* A newly allocated frame is pinned so that it won't be evicted before data is loaded.
+This mechanism can help us to reduce the swap ping-pong when VM is heavily loaded.
+*/
+bool pin;
+};
+
+static struct list frame_list;
+static struct list_elem *clock_pointer;
+\end{lstlisting}
+
+In \lstinline{vm/sup_page.h} and \lstinline{vm/sup_page.c}.
+	\begin{lstlisting}
+struct sup_page_entry
+{
+/* The swap slot index in SWAP where this page is stored.
+  Only applicable when status==ON_SWAP */
+swap_idx swap_slot;
+}
+	\end{lstlisting}
 \end{aspect}
 
 \begin{aspect}{ALGORITHMS}
 	\begin{qc}
 		B2: When a frame is required but none is free, some frame must be
-		evicted.  Describe your code for choosing a frame to evict.
+		evicted.
+		Describe your code for choosing a frame to evict.
 	\end{qc}
+	See \lstinline{struct vm_frame *frame_get_victim (void)} function in \lstinline{vm/frame.c}.\\
+	We implement \emph{clock} algorithm which choose a framem to evict in the following procedure:
+	\begin{enumerate}
+		\item Keep track all the frames in used with a cyclic-list structure.
+		      Keep a clock pointer which can walk through the list.
+		\item Proceed the clock pointer by one step.
+		\item If clock pointer is pointing to a frame whose reference bit is not set in the page-directory (using \lstinline{pagedir_is_accessed})),
+		      choose it as the victim.\\
+		      Otherwise, clear the reference bit. We may evict this frame if no un-accessed frame is found.
+	\end{enumerate}
+	This algorithm is guaranteed to found a victim in $2\times f$ steps where $f$ is the number of frames in use.
+	The performance is satisfiable, it can pass all the relavent test cases.
 
 	\begin{qc}
 		B3: When a process $P$ obtains a frame that was previously used by a process $Q$,
 		how do you adjust the page table (and any other data structures) to reflect the frame $Q$ no longer has?
 	\end{qc}
+	We shall performe the following procedure atomically:
+	\begin{enumerate}
+		\item Find the page associated to this frame in page-directory of $Q$.
+		\item Remove the mapping in page-directory.
+		\item Write the frame to swap and set the \lstinline{swap_idx} in sup-table.
+		\item Set the status of this page to \lstinline{IN_SWAP} in sup-table.
+	\end{enumerate}
+	To implement it, we disable the interrupt before performaing swap-out.
 
 	\begin{qc}
 		B4: Explain your heuristic for deciding whether a page fault for an invalid virtual address
 		should cause the stack to be extended into the page that faulted.
 	\end{qc}
+	We use the following heuristic to infer if we need to extend stack:
+	\begin{itemize}
+		\item the page-fault must be a recoverable one: Not a permission violation.
+		\item the fault address is above \lstinline{esp} of the user process thread.
+		\item the fault address is \lstinline{esp-4} if a \lstinline{PUSH} instruction cause it.
+		\item the fault address is \lstinline{esp-32} if a \lstinline{PUSHA} instruction cause it.
+	\end{itemize}
 
 \end{aspect}
 
@@ -34,18 +97,41 @@
 		In particular, explain how it prevents deadlock.
 		(Refer to the textbook for an explanation of the necessary conditions for deadlock.)
 	\end{qc}
+	We have mainly three modules coordinating to provide VM functionality:
+	\begin{itemize}
+		\item The supplemental page table in PCB of every user process.
+		\item The frame resource management: Keep track of every in use frame and the page associated to it.
+		\item The swap partition management: Write to or read the data from disk to frame.
+	\end{itemize}
+	And we have the following communications and synchronizations:
+	\begin{itemize}
+		\item If a process updates its own page-directory and supplemental page table, no synchronization is needed.
+		\item Any call to frame resource management module will acquire the \lstinline{struct lock frame_lock} if it need to update the frames in-use list.
+		\item Any call to swap partition management module will acquire the \lstinline{struct lock swap_lock} when accessing the unused-disk-sectors bitmap.
+		\item When the frame management module want to evict a in-use frame:
+		      Disable the interrupt and update the supplemental page table as well as the page directory.
+	\end{itemize}
+	We can see that no cyclic dependency exists so deadlock will never happens.
 
 	\begin{qc}
 		B6: A page fault in process $P$ can cause another process $Q$'s frame to be evicted.
 		How do you ensure that $Q$ cannot access or modify the page during the eviction process?
 		How do you avoid a race between $P$ evicting $Q$'s frame and $Q$ faulting the page back in?
 	\end{qc}
+	We disable the interrupt so $Q$ won't be able to interfere the eviction procedure (write to swap, update sup-table).\\
+	The two issuses are avoided as the eviction is an atomic operation.
 
 	\begin{qc}
 		B7: Suppose a page fault in process $P$ causes a page to be read from the file system or swap.
 		How do you ensure that a second process $Q$ cannot interfere
 		by e.g. attempting to evict the frame while it is still being read in?
 	\end{qc}
+	When $P$ triggers page-fault and need to read a page back from swap,
+	we allocate a frame for that page in a critical section (acquire \lstinline{struct lock frame_lock}.).
+	Thus, it is impossible for two processes to get the same frame.\\
+
+	We set the \lstinline{pin} field of the newly allocated frame and unpin it after the data is read from swap.
+	Therefore, this frame will not be evicted when we are recovering it from swap. Data-integrity is ensured.
 
 	\begin{qc}
 		B8: Explain how you handle access to paged-out pages that occur during system calls.
@@ -54,6 +140,10 @@
 		or do you use some other design?
 		How do you gracefully handle attempted accesses to invalid virtual addresses?
 	\end{qc}
+
+	We do not change the code of syscall handlers, instead we use page-fault to bring it in.
+	We save the caller's page-directory and sup-page table before calling syscall handlers so
+	the page-fault in kernel space can correctly bring the page in for the user-process.
 \end{aspect}
 
 
@@ -64,4 +154,16 @@
 		possibility for deadlock but allows for high parallelism.
 		Explain where your design falls along this continuum and why you chose to design it this way.
 	\end{qc}
+	Our design lies the the middle of the spectrum, multiple coarse-grained locks are used:
+	\begin{itemize}
+		\item If a process updates its own page-directory and supplemental page table, no synchronization is needed.
+		\item Any call to frame resource management module will acquire the \lstinline{struct lock frame_lock} if it need to update the frames in-use list.
+		\item Any call to swap partition management module will acquire the \lstinline{struct lock swap_lock} when accessing the unused-disk-sectors bitmap.
+		\item When the frame management module want to evict a in-use frame:
+		      Disable the interrupt and update the supplemental page table as well as the page directory.
+	\end{itemize}
+	The above mechanism allows more parallelism than a synchronizing all operations on VM with a global lock.
+	Deadlocks are completely out of our concern as no cyclic lock dependency exists.
+
+	Moreover this design strikes a nice balance between coding complexity and performance.
 \end{aspect}
