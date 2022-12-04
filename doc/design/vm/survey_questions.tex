@@ -1,0 +1,42 @@
+\section*{FEEDBACKS}
+\begin{aspect}{SURVEY QUESTIONS}
+	Answering these questions is optional, but it will help us improve the course in future quarters.
+	Feel free to tell us anything you wantthese questions are just to spur your thoughts.
+	You may also choose to respond anonymously in the course evaluations at the end of the quarter.
+
+	\begin{qc}
+		In your opinion,
+		was this assignment, or any one of the three problems in it, too easy or too hard?
+		Did it take too long or too little time?
+	\end{qc}
+	The difficulty is moderate overall, but it is hard at beginning. At the beginning, we have to design everything on our own. This is difficult especially when we are unfamiliar with the structure of pintos. We spend a lot of time on figuring on what function to user or what information we can get. Therefore, at first, we overestimate the total time we need to complete the project. In the following few hours, as we get more familiar with pintos, the task become easier.
+
+	\begin{qc}
+		Did you find that working on a particular part of the assignment
+		gave you greater insight into some aspect of OS design?
+	\end{qc}
+
+	Yes. At first, we try to load the memory immediately when we grow the stack, and lazy load for other cases. But soon we discover this is a bad design and will make our interface inconsistent. So we decide seperate lazy load (called 'install' in our project) with actual load (called load). When growing the stack, we call install first and immediately calls load. This seems stupid at first sight, but the seperation make each part focus on its own tasks, and make the code neat and flexible. It's also more convenient to check the integrity of the arguments. We realize if we find one processure has many smaller steps, then it's a good time to seperate the processure into severall smaller functions.\\
+	Another technique we discover is the use of ASSERT. It may not only used as a debug method, but also a hint when writing the code. When writing small project individually, assert evering is very annoying. However, when writing a complex project or system with others, we don't know whether other people will call our function correctly, or whether they can easily reason about the property of the system. Since the system is too complex, sometimes we will misunderstand our own code. In this case, we should leave enough asserion in the code to notice both others and ourselves how to use the funciton correctly.
+
+
+	\begin{qc}
+		Is there some particular fact or hint we should give students in future quarters
+		to help them solve the problems?
+		Conversely, did you find any of our guidance to be misleading?
+	\end{qc}
+	Yes. You should tell student how to change the makefiles, including how to add new files into compilation and how to change the optimiaztion flags. Although we know how to write makefile or how to write compilation instruction, the structure of pintos is too complex to locate the correct file to modify.
+
+	\begin{qc}
+		Do you have any suggestions for the TAs to more effectively assist students,
+		either for future quarters or the remaining projects?
+	\end{qc}
+	No.
+	\begin{qc}
+		Any other comments?
+	\end{qc}
+	No.
+\end{aspect}
+
+
+

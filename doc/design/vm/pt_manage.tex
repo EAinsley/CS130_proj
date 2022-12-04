@@ -1,0 +1,176 @@
+\section*{PAGE TABLE MANAGEMENT}
+
+\begin{aspect}{DATA STRUCTURES}
+  \begin{qc}
+    A1: Copy here the declaration of each new or changed \lstinline{struct} or member,
+    global or static variable, \lstinline{typedef}, or enumeration.
+    Identify the purpose of each in 25 words or less.
+  \end{qc}
+  We create four new file: \texttt{frame.h}, \texttt{frame.c}, \texttt{sup\_page.h} and \texttt{sup\_page.c}.\\
+  In \texttt{frame.h}
+  \begin{lstlisting}
+struct vm_frame
+{
+  /* physical (kernel) address of this frame */
+  void *phy_addr;
+  /* the page that currently occupies this frame*/
+  void *upage_addr;
+  /* the thread who have a page mapped to this frame */
+  struct thread *owner;
+
+  /* hash map element, used for quick search*/
+  struct hash_elem hash_elem;
+  /* list element to implement LRU */
+  struct list_elem list_elem;
+};
+	\end{lstlisting}
+  and in \texttt{frame.c}
+  \begin{lstlisting}
+
+#define FRAME_CRITICAL                                                        \
+  for (int i = (lock_acquire (&frame_lock), 0); i < 1;                        \
+       lock_release (&frame_lock), i++)
+
+static struct lock frame_lock;
+
+/* The hash map for the node*/
+static struct hash frame_hash;
+/* The list for LRU*/
+static struct list frame_list;
+	\end{lstlisting}
+  The frame is used to store the allocated frame on physical memory. It records the physical address, virtual address and the thread own the frame. The frame node was stored both in hash table and in the list. The hash table use its physical address as the key. We give the frame a lock to synchronize.\\
+  In \texttt{sup\_page.h}
+  \begin{lstlisting}
+enum SUP_PAGE_STATUS
+{
+  LOADED,
+  ZERO,
+  IN_FILE,
+  ON_SWAP
+};
+
+struct vm_sup_page_table
+{
+  struct hash hash_table;
+};
+
+struct sup_page_entry
+{
+  /* status of this page table entry */
+  enum SUP_PAGE_STATUS status;
+  /* User space page addr*/
+  void *upage;
+  /* Kernal space addr*/
+  void *kpage;
+
+  /* permission */
+  bool writable;
+
+  /* hash table node used to map the upage onto the table.*/
+  struct hash_elem hash_elem;
+};
+\end{lstlisting}
+  We use a hash table to manage the supplemental page table, and use the virtual(user space) addr as the key. Each entry in supplemental page table record its currently status, virtual address, physical address and whether it's writable. There are four status for supplemental page to support lazy load: \texttt{LOADED} means the frame is loaded (has been assigned a real physical address). If the frame should be set to all zero, but has not been accessed yet, then it's in status \texttt{ZERO}. \texttt{IN\_FILE} meas the page should get its data from files, and \texttt{ON\_SWAP} means the frame is currently swapped out.\\
+  Also, in \texttt{thread.h}\\
+  \begin{lstlisting}
+struct thread
+{
+#ifdef VM
+  struct vm_sup_page_table *supplemental_table;
+#endif
+#ifdef USERPROG
+  void *userprog_syscall_esp; // save the ESP stack pointer for page-fault
+                              // handling
+#endif
+}
+\end{lstlisting}
+  Each thread has its own supplemental page table. We also add a new field to record the user esp before entring the kernel mode.
+\end{aspect}
+
+\begin{aspect}{ALGORITHMS}
+  \begin{qc}
+    A2: In a few paragraphs, describe your code for accessing the data stored in the SPT about a given page.
+  \end{qc}
+  The data can be accessed in two manners: The first is when we have a page fault, we will consult the supplemental page table how to deal with it. The second is when we try to delete the entries from the supplemental page table when process exits. \\
+  In the first case, the page fault will call up the exception handler in \texttt{exception.c}. In function \texttt{page\_fault}, we will first check the status of the fault address.
+  \begin{lstlisting}
+  // permission error, kill the process
+  if (!not_present)
+    goto END;
+
+  /* find correct user process ESP:
+    - page fault from user: `f->esp`
+    - page fault from kernel(syscall): `userprog_syscall_esp`
+  */
+  struct thread *t = thread_current ();
+  void *esp = user ? f->esp : t->userprog_syscall_esp;
+
+  bool valid =
+      // valid user address
+      fault_addr >= (void *)0x08048000
+      && fault_addr <= PHYS_BASE
+      // not accessing kernel
+      && !(is_kernel_vaddr (fault_addr) && user);
+  if (!valid)
+    goto END;
+
+  // Check if the address is valid in user space and grow the stack
+  bool on_stack
+    = (fault_addr >= esp || fault_addr == esp - 4 || fault_addr == esp - 32);
+  \end{lstlisting}
+  ...
+  \begin{lstlisting}
+  END:
+  /* See section [3.1.5]
+  a page fault in the kernel merely sets eax to 0xffffffff
+  and copies its former value into eip */
+  if (!user)
+  { // kernel mode
+      f->eip = (void *)f->eax;
+      f->eax = 0xffffffff;
+      return;
+  }
+  printf ("Page fault at %p: %s error %s page in %s context.\n", fault_addr,
+  not_present ? "not present" : "rights violation",
+  write ? "writing" : "reading", user ? "user" : "kernel");
+  kill (f);
+  \end{lstlisting}
+  If \texttt{on\_stack} is true, we will grow the stack. This is done by first install a zero page into the supplemental and then load it into memory. If the address is not on stack, we will check if the address has been installed into the supplemental page table. If not, that means the user is try to access an invalid the address and will get killed. If the page was installed previously, we just load the page into the memory.
+  \begin{lstlisting}
+  if (on_stack)
+    {
+      // allocate new page
+      if (!vm_sup_page_find_entry (t->supplemental_table, fault_page))
+        vm_sup_page_install_zero_page (t->supplemental_table, fault_page);
+    }
+  // probability need: load from swap OR load from ELF(code/bss/data...)
+  bool load_ok
+      = vm_sup_page_load_page (t->supplemental_table, t->pagedir, fault_page);
+  if (load_ok)
+    return;
+\end{lstlisting}
+  In the second case, we will call \texttt{vm\_sup\_page\_destroy} to clear the whole supplemental page table. This function is called when process exit.\\
+  Then entry in the supplemental page table are accessed through hash table, which use the virtual address as a key.
+  \begin{qc}
+    A3: How does your code coordinate accessed and dirty bits between kernel and user virtual addresses
+    that alias a single frame,
+    or alternatively how do you avoid the issue?
+  \end{qc}
+  We avoid this issue by only accessing user data through the user virtual address. In \texttt{sup\_page.c}, you can find that our hash function only use user virtual address, so the data can only be accessed through the user virtual address.\\
+\end{aspect}
+
+\begin{aspect}{SYNCHRONIZATION}
+  \begin{qc}
+    A4: When two user processes both need a new frame at the same time,
+    how are races avoided?
+  \end{qc}
+  We give the frame a lock to avoid race condition. Before we start allocate the frame, we will always try to acquire the lock. When two process both need a new frame, we ensure that they get the frame one by one.
+\end{aspect}
+
+\begin{aspect}{RATIONALE}
+  \begin{qc}
+    A5: Why did you choose the data structure(s) that you did
+    for representing virtual-to-physical mappings?
+  \end{qc}
+  Virtual to physical mappings are naturally key-value pairs, this works best with hash table. The hash table in pintos was dynamically increased, so it will not cost too much memory waste. Search an element in hash table only need constant time while search an element in linked list (or bitmap) need linear time. The hash table is also efficient than the other structure.
+\end{aspect}

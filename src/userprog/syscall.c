@@ -10,12 +10,6 @@
 #include <syscall-nr.h>
 
 #define SYSCALL_FN(name) sys__##name
-#define ATOMIC_FS_OP                                                          \
-  for (int i = (lock_acquire (&filesys_lock), 0); i < 1;                      \
-       lock_release (&filesys_lock), i++)
-
-/* process exit on error */
-static void err_exit (void);
 
 /* Projects 2 and later. */
 static void SYSCALL_FN (halt) (void);
@@ -31,13 +25,12 @@ static int SYSCALL_FN (write) (int fd, const void *buffer, unsigned size);
 static void SYSCALL_FN (seek) (int fd, unsigned position);
 static unsigned SYSCALL_FN (tell) (int fd);
 static void SYSCALL_FN (close) (int fd);
+static mapid_t SYSCALL_FN (mmap) (int fd, void *addr);
+static void SYSCALL_FN (munmap) (mapid_t mapid);
 
 static void check_user_valid_string (const char *);
 static void check_user_valid_ptr (const void *);
 struct file *get_current_open_file (int fd);
-
-/* Locks for the filesystem */
-struct lock filesys_lock;
 
 /* Reads a byte at user virtual address UADDR.
    UADDR must be below PHYS_BASE.
@@ -69,9 +62,10 @@ put_user (uint8_t *udst, uint8_t byte)
 }
 
 /* process exit on error */
-static void
+void
 err_exit ()
 {
+  DEBUG_PRINT ("[invalid syscall] user program %s\n", thread_current ()->name);
   thread_current ()->proc->proc_status = PROC_ERROR_EXIT;
   SYSCALL_FN (exit) (-1);
 }
@@ -171,6 +165,10 @@ static void
 syscall_handler (struct intr_frame *f)
 {
   int id = syscall_arg (f, 0, int);
+
+  // save user prog ESP for potential page fault in syscall procedure.
+  thread_current ()->userprog_syscall_esp = f->esp;
+
   /* Projects 2 and later. */
   FWD_CASE (SYS_HALT, FWD0 (halt));
   FWD_CASE (SYS_EXIT, FWD1 (exit, int));
@@ -185,6 +183,8 @@ syscall_handler (struct intr_frame *f)
   FWD_CASE (SYS_SEEK, FWD2 (seek, int, unsigned));
   FWD_CASE (SYS_TELL, FWD1_RET (tell, int));
   FWD_CASE (SYS_CLOSE, FWD1 (close, int));
+  FWD_CASE (SYS_MMAP, FWD2_RET (mmap, int, void *));
+  FWD_CASE (SYS_MUNMAP, FWD1 (munmap, mapid_t));
 
   // invalid system call
   err_exit ();
@@ -193,7 +193,6 @@ void
 syscall_init (void)
 {
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
-  lock_init (&filesys_lock);
 }
 
 /*
@@ -231,16 +230,14 @@ static bool
 SYSCALL_FN (create) (const char *file, unsigned initial_size)
 {
   check_user_valid_string (file);
-  bool result;
-  ATOMIC_FS_OP { result = filesys_create (file, initial_size); }
+  bool result = filesys_create (file, initial_size);
   return result;
 }
 static bool
 SYSCALL_FN (remove) (const char *file)
 {
   check_user_valid_string (file);
-  bool result = false;
-  ATOMIC_FS_OP { result = filesys_remove (file); }
+  bool result = filesys_remove (file);
   return result;
 }
 static int
@@ -249,8 +246,7 @@ SYSCALL_FN (open) (const char *file)
   int fd = -1;
   // Check if pointer is NULL
   check_user_valid_string (file);
-  struct file *fp = NULL;
-  ATOMIC_FS_OP { fp = filesys_open (file); }
+  struct file *fp = filesys_open (file);
   if (fp != NULL)
     {
       fd = fd_list_insert (&proc_current ()->fd_list, fp);
@@ -263,8 +259,7 @@ SYSCALL_FN (filesize) (int fd)
   struct file *f = fd_list_get_file (&proc_current ()->fd_list, fd);
   if (f == NULL)
     err_exit ();
-  int result = 0;
-  ATOMIC_FS_OP { result = file_length (f); }
+  int result = file_length (f);
   return result;
 }
 static int
@@ -287,8 +282,7 @@ SYSCALL_FN (read) (int fd, void *buffer, unsigned size)
     }
   // Read file
   struct file *fp = get_current_open_file (fd);
-  int result = 0;
-  ATOMIC_FS_OP { result = file_read (fp, buffer, size); }
+  int result = file_read (fp, buffer, size);
   return result;
 }
 
@@ -308,8 +302,7 @@ SYSCALL_FN (write) (int fd, const void *buffer, unsigned size)
   // Read file
   struct file *fp = get_current_open_file (fd);
   // Write file.
-  int result = 0;
-  ATOMIC_FS_OP { result = file_write (fp, buffer, size); }
+  int result = file_write (fp, buffer, size);
   return result;
 }
 static void
@@ -318,21 +311,71 @@ SYSCALL_FN (seek) (int fd, unsigned position)
   // Get file
   struct file *fp = get_current_open_file (fd);
   // Seek file
-  ATOMIC_FS_OP { file_seek (fp, position); }
+  file_seek (fp, position);
 }
 static unsigned
 SYSCALL_FN (tell) (int fd)
 {
   // Get file
   struct file *fp = get_current_open_file (fd);
-  unsigned pos = 0;
-  ATOMIC_FS_OP { pos = file_tell (fp); }
+  unsigned pos = file_tell (fp);
   return pos;
 }
 static void
 SYSCALL_FN (close) (int fd)
 {
   fd_list_remove (&proc_current ()->fd_list, fd);
+}
+
+static mapid_t
+SYSCALL_FN (mmap) (int fd, void *addr)
+{
+  // check_user_valid_ptr (addr);
+  struct file *fp = get_current_open_file (fd);
+  off_t length = 0;
+  length = file_length (fp);
+  // Check integrity.
+  // See
+  // https://alfredthiel.gitbook.io/pintosbook/project-description/lab3b-mmap-files/your-tasks#:~:text=A%20call,mappable
+  bool valid = fd > 1 && length > 0 && addr && pg_ofs (addr) == 0;
+  if (!valid)
+    return -1;
+  // Reopen the file
+  struct thread *t = thread_current ();
+  fp = file_reopen (fp);
+  length = file_length (fp);
+  // Check the integrity again
+  if (fp == NULL || length == 0)
+    return -1;
+  // All the frames should not be mapped already.
+  for (int ofs = 0; ofs < length; ofs += PGSIZE)
+    {
+      if (vm_sup_page_find_entry (t->supplemental_table, addr + ofs) != NULL)
+        return -1;
+    }
+
+  // Ok. Map the files.
+  uint32_t pages_count = 0;
+  for (int ofs = 0; ofs < length; ofs += PGSIZE)
+    {
+      uint32_t read_bytes = length - ofs;
+      read_bytes = read_bytes > PGSIZE ? PGSIZE : read_bytes;
+      if (!vm_sup_page_map (t->supplemental_table, addr + ofs, fp, ofs,
+                            read_bytes))
+        {
+          // We should clear up the memory...?
+          vm_sup_page_unmap (t->supplemental_table, addr, pages_count);
+          return -1;
+        }
+      pages_count += 1;
+    }
+  // Allcate mapid
+  return thread_mmap_list_insert (&t->mmap_list, addr, pages_count);
+}
+static void
+SYSCALL_FN (munmap) (mapid_t mapid)
+{
+  thread_mmap_list_remove (&thread_current ()->mmap_list, mapid);
 }
 
 /* Check whether the string is valid in user space */

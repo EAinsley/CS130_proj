@@ -309,6 +309,7 @@ thread_exit (void)
   list_remove (&thread_current ()->allelem);
   thread_current ()->status = THREAD_DYING;
   schedule ();
+  // TODO - Destroy mmap list;
   NOT_REACHED ();
 }
 
@@ -484,6 +485,12 @@ init_thread (struct thread *t, const char *name, int priority)
   t->pagedir = NULL;
   t->proc = NULL;
 
+// VM
+#ifdef VM
+  t->supplemental_table = NULL;
+  list_init (&t->mmap_list);
+#endif
+
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
   intr_set_level (old_level);
@@ -559,6 +566,70 @@ thread_schedule_tail (struct thread *prev)
     {
       ASSERT (prev != cur);
       palloc_free_page (prev);
+    }
+}
+
+/* mmap functions*/
+
+/* clear the mmap list, release all the resources */
+void
+thread_mmap_list_clear (struct list *ml)
+{
+  DEBUG_PRINT ("claer thread mmap list");
+  struct thread *t = thread_current ();
+  while (!list_empty (ml))
+    {
+      struct list_elem *e = list_pop_front (ml);
+      struct thread_mmap_node *mmap_node
+          = list_entry (e, struct thread_mmap_node, list_elem);
+      vm_sup_page_unmap (t->supplemental_table, mmap_node->upage_addr,
+                         mmap_node->pages_count);
+      free (mmap_node);
+    }
+  DEBUG_PRINT ("thread mmap list cleared");
+}
+/* Insert new mmap files into the list and return the mapid*/
+mapid_t
+thread_mmap_list_insert (struct list *ml, void *upage_addr, uint32_t count)
+{
+  struct thread_mmap_node *node
+      = (struct thread_mmap_node *)malloc (sizeof (struct thread_mmap_node));
+  node->pages_count = count;
+  node->upage_addr = upage_addr;
+  node->mapid = 0;
+  struct list_elem *e = list_begin (ml);
+  // Search the first unused map id
+  for (; e != list_end (ml)
+         && node->mapid
+                == list_entry (e, struct thread_mmap_node, list_elem)->mapid;
+       e = list_next (e), node->mapid++)
+    ;
+  list_insert (e, &node->list_elem);
+  return node->mapid;
+}
+/* unmap the mapped file and free the resource. */
+void
+thread_mmap_list_remove (struct list *ml, mapid_t mapid)
+{
+  struct thread *t = thread_current ();
+  for (struct list_elem *e = list_begin (ml); e != list_end (ml);
+       e = list_next (e))
+    {
+      struct thread_mmap_node *node
+          = list_entry (e, struct thread_mmap_node, list_elem);
+      if (mapid == node->mapid)
+        {
+          vm_sup_page_unmap (t->supplemental_table, node->upage_addr,
+                             node->pages_count);
+          list_remove (e);
+          free (node);
+          return;
+        }
+      // Didn't find mapid
+      if (node->mapid > mapid)
+        {
+          break;
+        }
     }
 }
 

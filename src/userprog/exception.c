@@ -148,6 +148,7 @@ page_fault (struct intr_frame *f)
      [IA32-v3a] 5.15 "Interrupt 14--Page Fault Exception
      (#PF)". */
   asm("movl %%cr2, %0" : "=r"(fault_addr));
+  void *fault_page = pg_round_down (fault_addr);
 
   /* Turn interrupts back on (they were only off so that we could
      be assured of reading CR2 before it changed). */
@@ -161,9 +162,47 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
 
+
+  // permission error, kill the process
+  if (!not_present)
+    goto END;
+
+  /* find correct user process ESP:
+    - page fault from user: `f->esp`
+    - page fault from kernel(syscall): `userprog_syscall_esp`
+  */
+  struct thread *t = thread_current ();
+  void *esp = user ? f->esp : t->userprog_syscall_esp;
+
+  bool valid =
+      // valid user address
+      fault_addr >= (void *)0x08048000
+      && fault_addr <= PHYS_BASE
+      // not accessing kernel
+      && !(is_kernel_vaddr (fault_addr) && user);
+  if (!valid)
+    goto END;
+
+  // Check if the address is valid in user space and grow the stack
+  // https://alfredthiel.gitbook.io/pintosbook/project-description/lab3b-mmap-files/faq#why-do-user-processes-sometimes-fault-above-the-stack-pointer
+  bool on_stack
+      = (fault_addr >= esp || fault_addr == esp - 4 || fault_addr == esp - 32);
+  if (on_stack)
+    {
+      // allocate new page
+      if (!vm_sup_page_find_entry (t->supplemental_table, fault_page))
+        vm_sup_page_install_zero_page (t->supplemental_table, fault_page);
+    }
+  // probability need: load from swap OR load from ELF(code/bss/data...)
+  bool load_ok
+      = vm_sup_page_load_page (t->supplemental_table, t->pagedir, fault_page);
+  if (load_ok)
+    return;
+
+END:
   /* See section [3.1.5]
-     a page fault in the kernel merely sets eax to 0xffffffff
-     and copies its former value into eip */
+   a page fault in the kernel merely sets eax to 0xffffffff
+   and copies its former value into eip */
   if (!user)
     { // kernel mode
       f->eip = (void *)f->eax;
@@ -171,12 +210,6 @@ page_fault (struct intr_frame *f)
       return;
     }
 
-  // TODO: user program invalid memory access, terminate the process
-  //   if (not_present || (is_kernel_vaddr (fault_addr) && user))
-
-  /* To implement virtual memory, delete the rest of the function
-     body, and replace it with code that brings in the page to
-     which fault_addr refers. */
   printf ("Page fault at %p: %s error %s page in %s context.\n", fault_addr,
           not_present ? "not present" : "rights violation",
           write ? "writing" : "reading", user ? "user" : "kernel");
