@@ -13,8 +13,6 @@
 #include "userprog/gdt.h"
 #include "userprog/pagedir.h"
 #include "userprog/tss.h"
-#include "vm/frame.h"
-#include "vm/sup_page.h"
 #include <debug.h>
 #include <inttypes.h>
 #include <round.h>
@@ -210,19 +208,15 @@ process_exit (void)
     }
   intr_set_level (old);
 
-/* Destroy the current process's page directory and switch back to the
-   kernel-only page directory.
+  /* Destroy the current process's page directory and switch back to the
+     kernel-only page directory.
 
-   Correct ordering here is crucial.  We must set cur->pagedir to NULL before
-   switching page directories, so that a timer interrupt can't switch back to
-   the process page directory.  We must activate the base page directory
-   before destroying the process's page directory, or our active page
-   directory will be one that's been freed (and cleared).
-   */
-#ifdef VM
-  thread_mmap_list_clear (&cur->mmap_list);
-  vm_sup_page_destroy (cur->supplemental_table);
-#endif
+     Correct ordering here is crucial.  We must set cur->pagedir to NULL before
+     switching page directories, so that a timer interrupt can't switch back to
+     the process page directory.  We must activate the base page directory
+     before destroying the process's page directory, or our active page
+     directory will be one that's been freed (and cleared).
+     */
   uint32_t *pd = cur->pagedir;
   cur->pagedir = NULL;
   pagedir_activate (NULL);
@@ -349,12 +343,6 @@ load (const char *file_name, void (**eip) (void), void **esp)
   t->pagedir = pagedir_create ();
   if (t->pagedir == NULL)
     goto done;
-#ifdef VM
-  t->supplemental_table = vm_sup_page_create ();
-  if (t->supplemental_table == NULL)
-    goto done;
-#endif
-
   process_activate ();
 
   /* Open executable file. */
@@ -539,18 +527,30 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
-      // lazy load page from ELF file
-      bool load_page_ret = vm_sup_page_install_files (
-          thread_current ()->supplemental_table, upage, file, ofs,
-          page_read_bytes, writable);
-      if (!load_page_ret)
+      /* Get a page of memory. */
+      uint8_t *kpage = palloc_get_page (PAL_USER);
+      if (kpage == NULL)
         return false;
+
+      /* Load this page. */
+      if (file_read (file, kpage, page_read_bytes) != (int)page_read_bytes)
+        {
+          palloc_free_page (kpage);
+          return false;
+        }
+      memset (kpage + page_read_bytes, 0, page_zero_bytes);
+
+      /* Add the page to the process's address space. */
+      if (!install_page (upage, kpage, writable))
+        {
+          palloc_free_page (kpage);
+          return false;
+        }
 
       /* Advance. */
       read_bytes -= page_read_bytes;
       zero_bytes -= page_zero_bytes;
       upage += PGSIZE;
-      ofs += page_read_bytes;
     }
   return true;
 }
@@ -563,17 +563,14 @@ setup_stack (void **esp)
   uint8_t *kpage;
   bool success = false;
 
-  // The stack grows from top to bottom. The upage of the initial stack is
-  // the frist page from the top.
-  kpage = vm_frame_allocate (PAL_USER | PAL_ZERO,
-                             ((uint8_t *)PHYS_BASE) - PGSIZE);
+  kpage = palloc_get_page (PAL_USER | PAL_ZERO);
   if (kpage != NULL)
     {
       success = install_page (((uint8_t *)PHYS_BASE) - PGSIZE, kpage, true);
       if (success)
         *esp = PHYS_BASE;
       else
-        vm_frame_free (kpage, true);
+        palloc_free_page (kpage);
     }
   return success;
 }
@@ -594,16 +591,8 @@ install_page (void *upage, void *kpage, bool writable)
 
   /* Verify that there's not already a page at that virtual
      address, then map our page there. */
-
-  bool success = (pagedir_get_page (t->pagedir, upage) == NULL
-                  && pagedir_set_page (t->pagedir, upage, kpage, writable));
-#ifdef VM
-  success = success
-            && vm_sup_page_install_page (t->supplemental_table, upage, kpage);
-  if (success)
-    vm_frame_pin_upd (kpage, false);
-#endif
-  return success;
+  return (pagedir_get_page (t->pagedir, upage) == NULL
+          && pagedir_set_page (t->pagedir, upage, kpage, writable));
 }
 
 /* SECTION-BEGIN */
@@ -663,10 +652,12 @@ prepare_stack (void **esp, char *name, char *args)
 
   // copy the command line onto stack
   esp_push_str (esp, args);
+  LOG_EXPR ((char *)*esp, "after push arg-str [%s]");
   // point to the start of command line string
   args = (char *)*esp;
 
   esp_push_str (esp, name);
+  LOG_EXPR ((char *)*esp, "after push name-str [%s]");
   argv[argc++] = (char *)*esp;
   // word align
   esp_push_align (esp);
@@ -683,13 +674,17 @@ prepare_stack (void **esp, char *name, char *args)
   for (int i = argc; i >= 0; i--)
     {
       esp_push_ptr (esp, argv[i]);
+      LOG_EXPR (*(char **)*esp, "%s");
     }
   // push pointer to the (argv array) onto stack
   esp_push_ptr (esp, *esp);
+  LOG_EXPR (*esp, "argv pointer = %p");
   // push argc onto stack
   esp_push_u32 (esp, argc);
+  LOG_EXPR (*(uint32_t *)*esp, "argc = %u");
   // push return address
   esp_push_ptr (esp, NULL);
+  LOG_EXPR (*(void **)*esp, "return addr = %p");
 }
 
 /* SECTION-END */
@@ -837,7 +832,13 @@ fd_list_get_file (struct list *fl, int fd)
     {
       struct fd_node *node = list_entry (e, struct fd_node, fd_elem);
       if (fd == node->fd)
-        return node->f;
+        {
+          return node->f;
+        }
+      else if (fd > node->fd)
+        {
+          return NULL;
+        }
     }
   return NULL;
 }

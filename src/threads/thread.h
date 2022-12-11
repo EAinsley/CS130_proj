@@ -2,11 +2,10 @@
 #define THREADS_THREAD_H
 
 #include "userprog/process.h"
-#include "vm/sup_page.h"
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
-typedef int mapid_t;
+
 /* States in a thread's life cycle. */
 enum thread_status
 {
@@ -107,19 +106,6 @@ struct thread
      the parent proecss deallocate it for the children
   */
   struct proc_record *proc; // data records for process control
-  /*
-  Syscall handler may trigger page fault in kernel-mode.
-  In this case, page fault interrupt frame ESP is not the user-prog ESP but the
-  kernel stack pointer. To correctly handle the case and grow the stack, we
-  have to save ESP in syscall handler.
-  */
-  void *userprog_syscall_esp; // save the ESP stack pointer for page-fault
-                              // handling
-#endif
-
-#ifdef VM
-  struct vm_sup_page_table *supplemental_table;
-  struct list mmap_list; // list used to record mmap information
 #endif
 
   /* Owned by thread.c. */
@@ -165,19 +151,4 @@ int thread_get_load_avg (void);
 /* find a process by thread id */
 struct thread *thread_find (tid_t id);
 
-struct thread_mmap_node
-{
-  mapid_t mapid;    // The allocated mapid
-  void *upage_addr; // The start upage addr the file maps to
-  uint32_t pages_count;
-  struct list_elem list_elem;
-};
-
-/* clear the mmap list, release all the resources */
-void thread_mmap_list_clear (struct list *mmap_list);
-/* Insert new mmap files into the list and return the mapid*/
-mapid_t thread_mmap_list_insert (struct list *ml, void *upage_addr,
-                                 uint32_t count);
-/* unmap the mapped file and free the resource. */
-void thread_mmap_list_remove (struct list *ml, mapid_t mapid);
 #endif /* threads/thread.h */

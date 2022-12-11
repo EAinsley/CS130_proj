@@ -3,12 +3,9 @@
 #include "filesys/file.h"
 #include "filesys/free-map.h"
 #include "filesys/inode.h"
-#include "threads/synch.h"
 #include <debug.h>
 #include <stdio.h>
 #include <string.h>
-
-struct lock fs_lock;
 
 /* Partition that contains the file system. */
 struct block *fs_device;
@@ -23,8 +20,6 @@ filesys_init (bool format)
   fs_device = block_get_role (BLOCK_FILESYS);
   if (fs_device == NULL)
     PANIC ("No file system device found, can't initialize file system.");
-
-  lock_init (&fs_lock);
 
   inode_init ();
   free_map_init ();
@@ -50,8 +45,6 @@ filesys_done (void)
 bool
 filesys_create (const char *name, off_t initial_size)
 {
-  lock_acquire (&fs_lock);
-
   block_sector_t inode_sector = 0;
   struct dir *dir = dir_open_root ();
   bool success = (dir != NULL && free_map_allocate (1, &inode_sector)
@@ -61,7 +54,6 @@ filesys_create (const char *name, off_t initial_size)
     free_map_release (inode_sector, 1);
   dir_close (dir);
 
-  lock_release (&fs_lock);
   return success;
 }
 
@@ -73,8 +65,6 @@ filesys_create (const char *name, off_t initial_size)
 struct file *
 filesys_open (const char *name)
 {
-  lock_acquire (&fs_lock);
-
   struct dir *dir = dir_open_root ();
   struct inode *inode = NULL;
 
@@ -82,7 +72,6 @@ filesys_open (const char *name)
     dir_lookup (dir, name, &inode);
   dir_close (dir);
 
-  lock_release (&fs_lock);
   return file_open (inode);
 }
 
@@ -93,13 +82,10 @@ filesys_open (const char *name)
 bool
 filesys_remove (const char *name)
 {
-  lock_acquire(&fs_lock);
-
   struct dir *dir = dir_open_root ();
   bool success = dir != NULL && dir_remove (dir, name);
   dir_close (dir);
 
-  lock_release(&fs_lock);
   return success;
 }
 
