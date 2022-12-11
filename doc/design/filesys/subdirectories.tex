@@ -1,0 +1,39 @@
+\section*{SUBDIRECTORIES}
+
+\begin{aspect}{DATA STRUCTURES}
+	\begin{qc}
+		B1: Copy here the declaration of each new or changed \lstinline{struct} or member,
+		global or static variable, \lstinline{typedef}, or enumeration.
+		Identify the purpose of each in 25 words or less.
+	\end{qc}
+\end{aspect}
+
+\begin{aspect}{ALGORITHMS}
+	\begin{qc}
+		B2: Describe your code for traversing a user-specified path.  How
+		do traversals of absolute and relative paths differ?
+	\end{qc}
+\end{aspect}
+
+\begin{aspect}{SYNCHRONIZATION}
+	\begin{qc}
+		B4: How do you prevent races on directory entries?  For example,
+		only one of two simultaneous attempts to remove a single file
+		should succeed, as should only one of two simultaneous attempts to
+		create a file with the same name, and so on.
+	\end{qc}
+	\begin{qc}
+		B5: Does your implementation allow a directory to be removed if it
+		is open by a process or if it is in use as a process's current
+		working directory?  If so, what happens to that process's future
+		file system operations?  If not, how do you prevent it?
+	\end{qc}
+\end{aspect}
+
+
+\begin{aspect}{RATIONALE}
+	\begin{qc}
+		B6: Explain why you chose to represent the current directory of a
+		process the way you did.
+	\end{qc}
+\end{aspect}

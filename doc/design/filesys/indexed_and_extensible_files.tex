@@ -1,0 +1,46 @@
+\section*{INDEXED AND EXTENSIBLE FILES}
+
+\begin{aspect}{DATA STRUCTURES}
+  \begin{qc}
+    A1: Copy here the declaration of each new or changed \lstinline{struct} or member,
+    global or static variable, \lstinline{typedef}, or enumeration.
+    Identify the purpose of each in 25 words or less.
+  \end{qc}
+  \begin{qc}
+    A2: What is the maximum size of a file supported by your inode
+    structure?  Show your work.
+  \end{qc}
+\end{aspect}
+
+\begin{aspect}{SYNCHRONIZATION}
+  \begin{qc}
+    A3: Explain how your code avoids a race if two processes attempt to
+    extend a file at the same time.
+  \end{qc}
+  \begin{qc}
+    A4: Suppose processes A and B both have file F open, both
+    positioned at end-of-file.  If A reads and B writes F at the same
+    time, A may read all, part, or none of what B writes.  However, A
+    may not read data other than what B writes, e.g. if B writes
+    nonzero data, A is not allowed to see all zeros.  Explain how your
+    code avoids this race.
+  \end{qc}
+  \begin{qc}
+    A5: Explain how your synchronization design provides "fairness".
+    File access is "fair" if readers cannot indefinitely block writers
+    or vice versa.  That is, many processes reading from a file cannot
+    prevent forever another process from writing the file, and many
+    processes writing to a file cannot prevent another process forever
+    from reading the file.
+  \end{qc}
+\end{aspect}
+
+\begin{aspect}{RATIONALE}
+  \begin{qc}
+    A6: Is your inode structure a multilevel index?  If so, why did you
+    choose this particular combination of direct, indirect, and doubly
+    indirect blocks?  If not, why did you choose an alternative inode
+    structure, and what advantages and disadvantages does your
+    structure have, compared to a multilevel index?
+  \end{qc}
+\end{aspect}
