@@ -12,7 +12,7 @@ struct buffer_cache_node
   bool in_use;                       // if this cache node is in use.
 };
 
-void buffer_cache_init ();
+void buffer_cache_init (void);
 
 /* Read a block into the cache. */
 void buffer_cache_read (block_sector_t sector, void *dest, off_t offset,

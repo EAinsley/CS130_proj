@@ -3,23 +3,23 @@
 #include "lib/string.h"
 #include "threads/synch.h"
 
-const size_t BUFFER_CACHE_SIZE = 64;
-struct buffer_cache_node buffer_cache[BUFFER_CACHE_SIZE];
-struct lock buffer_cache_lock;
-size_t clock_pointer;
-size_t cache_size; // the number of nodes in the cache.
+#define BUFFER_CACHE_SIZE 64
+static struct buffer_cache_node cache[BUFFER_CACHE_SIZE];
+static struct lock buffer_cache_lock;
+static size_t clock_pointer;
+static size_t cache_size; // the number of nodes in the cache.
 
 static struct buffer_cache_node *
 buffer_cache_find_sector (block_sector_t sector);
-static struct buffer_cache_node *buffer_cache_find_empty ();
-static size_t buffer_cache_find_victim ();
+static struct buffer_cache_node *buffer_cache_find_empty (void);
+static size_t buffer_cache_find_victim (void);
 static void buffer_cache_flush (size_t i);
 
 void
 buffer_cache_init ()
 {
   lock_init (&buffer_cache_lock);
-  memset (buffer_cache, 0, sizeof (buffer_cache));
+  memset (cache, 0, sizeof (cache));
   clock_pointer = 0;
   cache_size = 0;
 }
@@ -53,14 +53,14 @@ buffer_cache_read (block_sector_t sector, void *dest, off_t offset,
       // Update the cache node.
       node->access = true;
     }
-  memcmp (dest, node->buffer + offset, length);
+  memcpy (dest, node->buffer + offset, length);
   lock_release (&buffer_cache_lock);
 }
 
 /*TODO - Finish this function*/
 void
-buffer_cache_write (block_sector_t sector, void *src, off_t offset,
-                    off_t length)
+buffer_cache_write (block_sector_t sector UNUSED, void *src UNUSED,
+                    off_t offset UNUSED, off_t length UNUSED)
 {
   // Try to find the sector
   // On cache miss: find a new slot and read from disk
@@ -75,9 +75,9 @@ buffer_cache_find_sector (block_sector_t sector)
   ASSERT (lock_held_by_current_thread (&buffer_cache_lock));
   for (int i = 0; i < BUFFER_CACHE_SIZE; i++)
     {
-      if (buffer_cache[i].sector == sector)
+      if (cache[i].sector == sector)
         {
-          return buffer_cache + i;
+          return cache + i;
         }
     }
   return NULL;
@@ -91,7 +91,7 @@ buffer_cache_find_empty ()
   int idx = 0;
   if (cache_size < BUFFER_CACHE_SIZE)
     {
-      for (idx = 0; idx < BUFFER_CACHE_SIZE && buffer_cache[idx].in_use; idx++)
+      for (idx = 0; idx < BUFFER_CACHE_SIZE && cache[idx].in_use; idx++)
         ;
     }
   else
@@ -99,7 +99,7 @@ buffer_cache_find_empty ()
       idx = buffer_cache_find_victim ();
       buffer_cache_flush (idx);
     }
-  return buffer_cache + idx;
+  return cache + idx;
 }
 
 /* Find a victim to be evicted. If no such node, return BUFFER_CACHE_SIZE*/
@@ -111,12 +111,12 @@ buffer_cache_find_victim ()
     {
       clock_pointer++;
       // Skip empty
-      if (!buffer_cache[clock_pointer].in_use)
+      if (!cache[clock_pointer].in_use)
         continue;
       // Skip accessed
-      if (buffer_cache[clock_pointer].access)
+      if (cache[clock_pointer].access)
         {
-          buffer_cache[clock_pointer].access = false;
+          cache[clock_pointer].access = false;
           continue;
         }
       return clock_pointer;
@@ -130,13 +130,14 @@ buffer_cache_flush (size_t idx)
 {
   ASSERT (lock_held_by_current_thread (&buffer_cache_lock));
   ASSERT (idx < BUFFER_CACHE_SIZE);
-  ASSERT (buffer_cache[idx].in_use);
-  if (buffer_cache[idx].dirty)
+  ASSERT (cache[idx].in_use);
+  if (cache[idx].dirty)
     {
       // Write back
-      block_write (fs_device, buffer_cache[idx].sector,
-                   buffer_cache[idx].buffer);
+      block_write (fs_device, cache[idx].sector, cache[idx].buffer);
     }
-  buffer_cache[idx].in_use = false;
+  cache[idx].in_use = false;
   cache_size--;
 }
+
+#undef BUFFER_CACHE_SIZE
