@@ -21,4 +21,7 @@ void buffer_cache_write (block_sector_t sector, void *src, off_t offset,
                          off_t length);
 void buffer_cache_close (void);
 
+// TODO - Periodically writeback
+// TODO - Prefetch sector
+
 #endif // BUFFER_CACHE_H
