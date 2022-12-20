@@ -30,7 +30,7 @@ void
 buffer_cache_read (block_sector_t sector, void *dest, off_t offset,
                    off_t length)
 {
-  ASSERT (offset + length < BLOCK_SECTOR_SIZE);
+  ASSERT (offset + length <= BLOCK_SECTOR_SIZE);
   lock_acquire (&buffer_cache_lock);
   // Try to find sector
   struct buffer_cache_node *node = buffer_cache_find_sector (sector);
@@ -42,29 +42,39 @@ buffer_cache_read (block_sector_t sector, void *dest, off_t offset,
       // Set the node
       block_read (fs_device, sector, node->buffer);
       node->sector = sector;
-      node->access = true;
-      node->dirty = false;
       node->in_use = true;
+      node->dirty = false;
       // Add size
       cache_size++;
     }
-  else
-    {
-      // Update the cache node.
-      node->access = true;
-    }
+  node->access = true;
+  // read the data
   memcpy (dest, node->buffer + offset, length);
   lock_release (&buffer_cache_lock);
 }
 
-/*TODO - Finish this function*/
+/* Read a block into the cache. Then write data from src to the cache.*/
 void
-buffer_cache_write (block_sector_t sector UNUSED, void *src UNUSED,
-                    off_t offset UNUSED, off_t length UNUSED)
+buffer_cache_write (block_sector_t sector, void *src, off_t offset,
+                    off_t length)
 {
+  ASSERT (offset + length <= BLOCK_SECTOR_SIZE);
+  lock_acquire (&buffer_cache_lock);
   // Try to find the sector
-  // On cache miss: find a new slot and read from disk
-  // Update the cache node.
+  struct buffer_cache_node *node = buffer_cache_find_sector (sector);
+  if (!node)
+    {
+      // On cache miss: find a new slot and read from disk
+      node = buffer_cache_find_empty ();
+      block_read (fs_device, sector, node->buffer);
+      node->sector = sector;
+      node->in_use = true;
+    }
+  node->access = true;
+  node->dirty = true;
+  // write the data
+  memcpy (node->buffer + offset, src, length);
+  lock_release (&buffer_cache_lock);
 }
 
 /* Find the cache node with sector. Return NULL if the node doesn't in the
