@@ -19,5 +19,6 @@ void buffer_cache_read (block_sector_t sector, void *dest, off_t offset,
                         off_t length);
 void buffer_cache_write (block_sector_t sector, void *src, off_t offset,
                          off_t length);
+void buffer_cache_close (void);
 
 #endif // BUFFER_CACHE_H

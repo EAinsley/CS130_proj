@@ -69,6 +69,7 @@ buffer_cache_write (block_sector_t sector, void *src, off_t offset,
       block_read (fs_device, sector, node->buffer);
       node->sector = sector;
       node->in_use = true;
+      cache_size++;
     }
   node->access = true;
   node->dirty = true;
@@ -76,6 +77,21 @@ buffer_cache_write (block_sector_t sector, void *src, off_t offset,
   memcpy (node->buffer + offset, src, length);
   lock_release (&buffer_cache_lock);
 }
+void
+buffer_cache_close (void)
+{
+  lock_acquire (&buffer_cache_lock);
+  for (int i = 0; i < BUFFER_CACHE_SIZE; i++)
+    {
+      if (cache[i].in_use && cache[i].dirty)
+        {
+          block_write (fs_device, cache[i].sector, cache[i].buffer);
+        }
+    }
+  lock_release (&buffer_cache_lock);
+}
+
+/* Helper functions*/
 
 /* Find the cache node with sector. Return NULL if the node doesn't in the
  * cache.*/
