@@ -101,7 +101,7 @@ buffer_cache_find_sector (block_sector_t sector)
   ASSERT (lock_held_by_current_thread (&buffer_cache_lock));
   for (int i = 0; i < BUFFER_CACHE_SIZE; i++)
     {
-      if (cache[i].sector == sector)
+      if (cache[i].in_use && cache[i].sector == sector)
         {
           return cache + i;
         }
@@ -133,9 +133,9 @@ static size_t
 buffer_cache_find_victim ()
 {
   ASSERT (lock_held_by_current_thread (&buffer_cache_lock));
-  for (int i = 0; i < 2 * BUFFER_CACHE_SIZE; i++)
+  for (int i = 0; i < 2 * BUFFER_CACHE_SIZE;
+       i++, clock_pointer = (clock_pointer + 1) % BUFFER_CACHE_SIZE)
     {
-      clock_pointer++;
       // Skip empty
       if (!cache[clock_pointer].in_use)
         continue;
@@ -154,6 +154,7 @@ buffer_cache_find_victim ()
 static void
 buffer_cache_flush (size_t idx)
 {
+  ASSERT (cache_size > 0);
   ASSERT (lock_held_by_current_thread (&buffer_cache_lock));
   ASSERT (idx < BUFFER_CACHE_SIZE);
   ASSERT (cache[idx].in_use);
