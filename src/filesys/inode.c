@@ -392,6 +392,8 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
               fs_sec_t data_sec = allocate_sector ();
               // FIXME - what to do if we cannot further extend the file
               ind_data.data_sectors[ind_idx] = data_sec;
+              buffer_cache_write (inode->data.indirect_blocks[ind_blk],
+                                  (void *)&ind_data, 0, BLOCK_SECTOR_SIZE);
             }
         }
 
