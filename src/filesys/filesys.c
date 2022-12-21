@@ -24,6 +24,8 @@ static void do_format (void);
 void
 filesys_init (bool format)
 {
+  buffer_cache_init ();
+
   fs_device = block_get_role (BLOCK_FILESYS);
   if (fs_device == NULL)
     PANIC ("No file system device found, can't initialize file system.");
@@ -46,6 +48,7 @@ filesys_done (void)
 {
   buffer_cache_close ();
   free_map_close ();
+  buffer_cache_close ();
 }
 
 /* Creates a file named NAME with the given INITIAL_SIZE.

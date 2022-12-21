@@ -346,6 +346,7 @@ SYSCALL_FN (mmap) (int fd UNUSED, void *addr UNUSED)
   // mmap not available in proj4
   DEBUG_PRINT ("NO mmap in project 4");
   err_exit ();
+  return -1;
 }
 static void
 SYSCALL_FN (munmap) (mapid_t mapid UNUSED)
