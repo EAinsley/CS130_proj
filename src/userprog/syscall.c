@@ -44,7 +44,7 @@ get_user (const uint8_t *uaddr)
     return -1;
 
   int result;
-  asm("movl $1f, %0; movzbl %1, %0; 1:" : "=&a"(result) : "m"(*uaddr));
+  asm ("movl $1f, %0; movzbl %1, %0; 1:" : "=&a"(result) : "m"(*uaddr));
   return result;
 }
 
@@ -55,9 +55,9 @@ static bool
 put_user (uint8_t *udst, uint8_t byte)
 {
   int error_code;
-  asm("movl $1f, %0; movb %b2, %1; 1:"
-      : "=&a"(error_code), "=m"(*udst)
-      : "q"(byte));
+  asm ("movl $1f, %0; movb %b2, %1; 1:"
+       : "=&a"(error_code), "=m"(*udst)
+       : "q"(byte));
   return error_code != -1;
 }
 
@@ -329,15 +329,16 @@ static mapid_t
 SYSCALL_FN (mmap) (int fd UNUSED, void *addr UNUSED)
 {
   // mmap not available in proj4
-  DEBUG_PRINT("NO mmap in project 4");
-  err_exit();
+  DEBUG_PRINT ("NO mmap in project 4");
+  err_exit ();
+  return -1;
 }
 static void
 SYSCALL_FN (munmap) (mapid_t mapid UNUSED)
 {
   // mmap not available in proj4
-  DEBUG_PRINT("NO mmap in project 4");
-  err_exit();
+  DEBUG_PRINT ("NO mmap in project 4");
+  err_exit ();
 }
 
 /* Check whether the string is valid in user space */
