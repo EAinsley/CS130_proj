@@ -397,7 +397,10 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
             }
         }
 
+      // update inode metadata
       inode->data.length = offset + size;
+      buffer_cache_write (inode->sector, (void *)&inode->data, 0,
+                          BLOCK_SECTOR_SIZE);
     }
   while (size > 0)
     {
