@@ -1,4 +1,5 @@
 #include "filesys/filesys.h"
+#include "buffer_cache.h"
 #include "filesys/directory.h"
 #include "filesys/file.h"
 #include "filesys/free-map.h"
@@ -20,6 +21,8 @@ static void do_format (void);
 void
 filesys_init (bool format)
 {
+  buffer_cache_init ();
+
   fs_device = block_get_role (BLOCK_FILESYS);
   if (fs_device == NULL)
     PANIC ("No file system device found, can't initialize file system.");
@@ -41,6 +44,7 @@ void
 filesys_done (void)
 {
   free_map_close ();
+  buffer_cache_close ();
 }
 
 /* Creates a file named NAME with the given INITIAL_SIZE.
@@ -93,13 +97,13 @@ filesys_open (const char *name)
 bool
 filesys_remove (const char *name)
 {
-  lock_acquire(&fs_lock);
+  lock_acquire (&fs_lock);
 
   struct dir *dir = dir_open_root ();
   bool success = dir != NULL && dir_remove (dir, name);
   dir_close (dir);
 
-  lock_release(&fs_lock);
+  lock_release (&fs_lock);
   return success;
 }
 
