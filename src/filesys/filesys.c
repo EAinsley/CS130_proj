@@ -10,6 +10,8 @@
 #include <stdio.h>
 #include <string.h>
 
+static void parse_path (const char *name, char *const path,
+                        char *const filename);
 struct lock fs_lock;
 
 /* Partition that contains the file system. */
@@ -77,16 +79,21 @@ struct file *
 filesys_open (const char *name)
 {
   lock_acquire (&fs_lock);
+  int name_len = strlen (name);
+  // Seperate filename from path
+  char *path = (char *)malloc (sizeof (char) * (strlen (name) + 1));
+  char *filename = (char *)malloc (sizeof (char) * strlen (name) + 1);
+  parse_path (name, path, filename);
 
-  struct dir *dir = thread_current ()->working_directory;
-  if (!dir)
-    dir = dir_open_root ();
+  // open the directory.
+  struct dir *dir = dir_open_path (path);
   struct inode *inode = NULL;
-
   if (dir != NULL)
-    dir_lookup (dir, name, &inode);
+    dir_lookup (dir, filename, &inode);
   dir_close (dir);
 
+  free (path);
+  free (filename);
   lock_release (&fs_lock);
   return file_open (inode);
 }
@@ -118,4 +125,22 @@ do_format (void)
     PANIC ("root directory creation failed");
   free_map_close ();
   printf ("done.\n");
+}
+
+static void
+parse_path (const char *name, char *const path, char *const filename)
+{
+  int name_len = strlen (name);
+  strlcpy (path, name, name_len + 1);
+  char *dir_end = strrchr (path, '/');
+  if (dir_end)
+    {
+      dir_end = '\0';
+      strlcpy (filename, dir_end + 1, name_len + 1);
+    }
+  else
+    {
+      path[0] = '\0';
+      strlcpy (filename, name, name_len + 1);
+    }
 }

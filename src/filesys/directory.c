@@ -2,6 +2,7 @@
 #include "filesys/filesys.h"
 #include "filesys/inode.h"
 #include "threads/malloc.h"
+#include "threads/thread.h"
 #include <list.h>
 #include <stdio.h>
 #include <string.h>
@@ -232,4 +233,42 @@ dir_readdir (struct dir *dir, char name[NAME_MAX + 1])
         }
     }
   return false;
+}
+
+struct dir *
+dir_open_path (char *path)
+{
+  struct dir *current_dir;
+  if (path[0] == '/')
+    {
+      // abosolute path
+      current_dir = dir_open_root ();
+    }
+  else
+    {
+      // relative path
+      struct thread *t = thread_current ();
+      current_dir = t->working_directory ? dir_reopen (t->working_directory)
+                                         : dir_open_root ();
+    }
+  char *saveptr, *token;
+  for (token = strtok_r (path, "/", &saveptr); token != NULL;
+       token = strtok_r (NULL, "/", &saveptr))
+    {
+      struct inode *inode = NULL;
+      if (!dir_lookup (current_dir, token, &inode))
+        goto fail;
+      // FIXME - Check if inode is a directory.
+      struct dir *next_dir = dir_open (inode);
+      if (!next_dir)
+        goto fail;
+      dir_close (current_dir);
+      current_dir = next_dir;
+    }
+
+  return current_dir;
+
+fail:
+  dir_close (current_dir);
+  return NULL;
 }
