@@ -838,10 +838,6 @@ fd_list_get_file (struct list *fl, int fd)
         {
           return node->f;
         }
-      else if (fd > node->fd)
-        {
-          return NULL;
-        }
     }
   return NULL;
 }
