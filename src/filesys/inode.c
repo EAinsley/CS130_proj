@@ -80,6 +80,7 @@ byte_to_sector (const struct inode *inode, off_t pos)
   if (pos >= inode_length (inode))
     return -1;
   // index calculation
+  ASSERT ((pos / BLOCK_SECTOR_SIZE) < FS_SECTORS)
   fs_sec_t sec_off = (fs_sec_t)(pos / BLOCK_SECTOR_SIZE);
   fs_sec_t ind_blk = sec_off / PTR_PER_SEC;
   fs_sec_t ind_idx = sec_off % PTR_PER_SEC;
@@ -132,6 +133,7 @@ release_sector (fs_sec_t sec)
 static fs_sec_t
 allocate_indirect (fs_sec_t data_blks)
 {
+  ASSERT (data_blks <= PTR_PER_SEC);
   fs_sec_t ind_sec = allocate_sector ();
   // error: can not allocate the indirect block
   if (ind_sec == ERR_SECTOR)
@@ -323,14 +325,9 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
 
   while (size > 0)
     {
-      /* Disk sector to read, starting byte offset within sector. */
-      block_sector_t sector_idx = byte_to_sector (inode, offset);
-      if (sector_idx == (block_sector_t)(-1))
-        break;
-      int sector_ofs = offset % BLOCK_SECTOR_SIZE;
-
       /* Bytes left in inode, bytes left in sector, lesser of the two. */
       off_t inode_left = inode_length (inode) - offset;
+      int sector_ofs = offset % BLOCK_SECTOR_SIZE;
       int sector_left = BLOCK_SECTOR_SIZE - sector_ofs;
       int min_left = inode_left < sector_left ? inode_left : sector_left;
 
@@ -339,6 +336,8 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
       if (chunk_size <= 0)
         break;
 
+      /* Disk sector to read, starting byte offset within sector. */
+      block_sector_t sector_idx = byte_to_sector (inode, offset);
       buffer_cache_read (sector_idx, buffer + bytes_read, sector_ofs,
                          chunk_size);
 
@@ -400,12 +399,9 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
     }
   while (size > 0)
     {
-      /* Sector to write, starting byte offset within sector. */
-      block_sector_t sector_idx = byte_to_sector (inode, offset);
-      int sector_ofs = offset % BLOCK_SECTOR_SIZE;
-
       /* Bytes left in inode, bytes left in sector, lesser of the two. */
       off_t inode_left = inode_length (inode) - offset;
+      int sector_ofs = offset % BLOCK_SECTOR_SIZE;
       int sector_left = BLOCK_SECTOR_SIZE - sector_ofs;
       int min_left = inode_left < sector_left ? inode_left : sector_left;
 
@@ -413,6 +409,9 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
       int chunk_size = size < min_left ? size : min_left;
       if (chunk_size <= 0)
         break;
+
+      /* Sector to write, starting byte offset within sector. */
+      block_sector_t sector_idx = byte_to_sector (inode, offset);
 
       /* Write the sector to the cache */
       buffer_cache_write (sector_idx, buffer + bytes_written, sector_ofs,
