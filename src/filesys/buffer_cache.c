@@ -55,7 +55,7 @@ buffer_cache_read (block_sector_t sector, void *dest, off_t offset,
 
 /* Read a block into the cache. Then write data from src to the cache.*/
 void
-buffer_cache_write (block_sector_t sector, void *src, off_t offset,
+buffer_cache_write (block_sector_t sector, const void *src, off_t offset,
                     off_t length)
 {
   ASSERT (offset + length <= BLOCK_SECTOR_SIZE);
