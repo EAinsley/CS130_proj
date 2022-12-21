@@ -27,6 +27,12 @@ static unsigned SYSCALL_FN (tell) (int fd);
 static void SYSCALL_FN (close) (int fd);
 static mapid_t SYSCALL_FN (mmap) (int fd, void *addr);
 static void SYSCALL_FN (munmap) (mapid_t mapid);
+/* directory syscall */
+static bool SYSCALL_FN (chdir) (const char *dir);
+static bool SYSCALL_FN (mkdir) (const char *dir);
+static bool SYSCALL_FN (readdir) (int fd, char *name);
+static bool SYSCALL_FN (isdir) (int fd);
+static int SYSCALL_FN (inumber) (int fd);
 
 static void check_user_valid_string (const char *);
 static void check_user_valid_ptr (const void *);
@@ -180,9 +186,18 @@ syscall_handler (struct intr_frame *f)
   FWD_CASE (SYS_SEEK, FWD2 (seek, int, unsigned));
   FWD_CASE (SYS_TELL, FWD1_RET (tell, int));
   FWD_CASE (SYS_CLOSE, FWD1 (close, int));
-  /* Only in Project 3 */
+/* Only in Project 3 */
+#ifdef VM
   FWD_CASE (SYS_MMAP, FWD2_RET (mmap, int, void *));
   FWD_CASE (SYS_MUNMAP, FWD1 (munmap, mapid_t));
+#endif
+#ifdef FILESYS
+  FWD_CASE (SYS_CHDIR, FWD1_RET (chdir, const char *));
+  FWD_CASE (SYS_MKDIR, FWD1_RET (mkdir, const char *));
+  FWD_CASE (SYS_READDIR, FWD2_RET (readdir, int, char *));
+  FWD_CASE (SYS_ISDIR, FWD1_RET (isdir, int));
+  FWD_CASE (SYS_INUMBER, FWD1_RET (inumber, int));
+#endif
 
   // invalid system call
   err_exit ();
@@ -329,15 +344,15 @@ static mapid_t
 SYSCALL_FN (mmap) (int fd UNUSED, void *addr UNUSED)
 {
   // mmap not available in proj4
-  DEBUG_PRINT("NO mmap in project 4");
-  err_exit();
+  DEBUG_PRINT ("NO mmap in project 4");
+  err_exit ();
 }
 static void
 SYSCALL_FN (munmap) (mapid_t mapid UNUSED)
 {
   // mmap not available in proj4
-  DEBUG_PRINT("NO mmap in project 4");
-  err_exit();
+  DEBUG_PRINT ("NO mmap in project 4");
+  err_exit ();
 }
 
 /* Check whether the string is valid in user space */
@@ -371,4 +386,31 @@ get_current_open_file (int fd)
   if (fp == NULL)
     err_exit ();
   return fp;
+}
+
+/* Todo - subdirectory entries */
+static bool
+SYSCALL_FN (chdir) (const char *dir)
+{
+  return false;
+}
+static bool
+SYSCALL_FN (mkdir) (const char *dir)
+{
+  return false;
+}
+static bool
+SYSCALL_FN (readdir) (int fd, char *name)
+{
+  return false;
+}
+static bool
+SYSCALL_FN (isdir) (int fd)
+{
+  return false;
+}
+static int
+SYSCALL_FN (inumber) (int fd)
+{
+  return false;
 }
