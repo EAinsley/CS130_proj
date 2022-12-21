@@ -27,8 +27,7 @@ struct proc_record
   struct semaphore sema_exit;            // up on exit, indicates proc exiting
   bool orphan;                           // whether the parent process exists
   struct proc_record *children[MAX_CHS]; // children process records
-  struct list fd_list; // list used to record file descriptors.
-  struct file *image;  // the image of self.
+  struct file *image;                    // the image of self.
 };
 
 /* find the process whose thread id equals to the given id and return the

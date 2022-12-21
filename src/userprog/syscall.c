@@ -262,14 +262,14 @@ SYSCALL_FN (open) (const char *file)
   struct file *fp = filesys_open (file);
   if (fp != NULL)
     {
-      fd = fd_list_insert (&proc_current ()->fd_list, fp);
+      fd = fd_list_insert (&thread_current ()->fd_list, fp);
     }
   return fd;
 }
 static int
 SYSCALL_FN (filesize) (int fd)
 {
-  struct file *f = fd_list_get_file (&proc_current ()->fd_list, fd);
+  struct file *f = fd_list_get_file (&thread_current ()->fd_list, fd);
   if (f == NULL)
     err_exit ();
   int result = file_length (f);
@@ -337,7 +337,7 @@ SYSCALL_FN (tell) (int fd)
 static void
 SYSCALL_FN (close) (int fd)
 {
-  fd_list_remove (&proc_current ()->fd_list, fd);
+  fd_list_remove (&thread_current ()->fd_list, fd);
 }
 
 static mapid_t
@@ -382,16 +382,19 @@ check_user_valid_ptr (const void *ptr)
 struct file *
 get_current_open_file (int fd)
 {
-  struct file *fp = fd_list_get_file (&proc_current ()->fd_list, fd);
+  struct file *fp = fd_list_get_file (&thread_current ()->fd_list, fd);
   if (fp == NULL)
     err_exit ();
   return fp;
 }
 
-/* Todo - subdirectory entries */
+/* Changes the current working directory of the process to dir, which may be
+relative or absolute.
+Returns true if successful, false on failure. */
 static bool
 SYSCALL_FN (chdir) (const char *dir)
 {
+
   return false;
 }
 static bool

@@ -100,12 +100,15 @@ struct thread
 
 #ifdef USERPROG
   /* Owned by userprog/process.c. */
-
   uint32_t *pagedir; // Page directory.
   /* created on process_execute.
      the parent proecss deallocate it for the children
   */
   struct proc_record *proc; // data records for process control
+#endif
+
+#ifdef FILESYS
+  struct list fd_list; // list used to record file descriptors.
 #endif
 
   /* Owned by thread.c. */

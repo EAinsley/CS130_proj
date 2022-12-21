@@ -229,8 +229,6 @@ process_exit (void)
       file_close (cur->proc->image);
     }
 
-  // NOTE - Memory freed here!
-  fd_list_clear (&cur->proc->fd_list);
   // notify parent thread that the children have exitted
   sema_up (&cur->proc->sema_exit);
 
@@ -697,7 +695,6 @@ proc_init (struct proc_record *proc)
   memset ((void *)proc, 0, sizeof (struct proc_record));
   proc->id = thread_tid ();
   sema_init (&proc->sema_exit, 0);
-  list_init (&proc->fd_list);
   proc->proc_status = PROC_RUNNING;
   proc->image = NULL;
 }
