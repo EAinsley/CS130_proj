@@ -23,8 +23,8 @@ typedef uint16_t fs_sec_t;
 #define PTR_PER_SEC (BLOCK_SECTOR_SIZE / PTR_SIZE)
 
 #define FS_SIZE (8 * (1 << 20))
-#define ERR_SECTOR (0)
 #define FS_SECTORS (FS_SIZE / BLOCK_SECTOR_SIZE)
+#define ERR_SECTOR ((fs_sec_t)(-1))
 #define INDIRECT_COUNT (FS_SECTORS / PTR_PER_SEC)
 
 // helper functions
@@ -85,9 +85,11 @@ byte_to_sector (const struct inode *inode, off_t pos)
   fs_sec_t ind_idx = sec_off % PTR_PER_SEC;
   // read the indirect block from disk
   struct indirect_block ind_data;
+  ASSERT (inode->data.indirect_blocks[ind_blk] != ERR_SECTOR);
   buffer_cache_read (inode->data.indirect_blocks[ind_blk], (void *)&ind_data,
                      0, BLOCK_SECTOR_SIZE);
   // find the corresponding sector
+  ASSERT (ind_data.data_sectors[ind_idx] != ERR_SECTOR);
   return (block_sector_t)ind_data.data_sectors[ind_idx];
 }
 
@@ -386,7 +388,7 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
           buffer_cache_read (inode->data.indirect_blocks[ind_blk],
                              (void *)&ind_data, 0, BLOCK_SECTOR_SIZE);
           // new data block is required
-          if (ind_data.data_sectors[ind_idx] == 0)
+          if (ind_data.data_sectors[ind_idx] == ERR_SECTOR)
             {
               fs_sec_t data_sec = allocate_sector ();
               // FIXME - what to do if we cannot further extend the file
