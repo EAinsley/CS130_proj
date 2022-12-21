@@ -321,7 +321,6 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
 {
   uint8_t *buffer = buffer_;
   off_t bytes_read = 0;
-  lock_acquire (&inode->mutex);
 
   while (size > 0)
     {
@@ -347,7 +346,6 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
       bytes_read += chunk_size;
     }
 
-  lock_release (&inode->mutex);
   return bytes_read;
 }
 
@@ -402,6 +400,7 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
       buffer_cache_write (inode->sector, (void *)&inode->data, 0,
                           BLOCK_SECTOR_SIZE);
     }
+  lock_release (&inode->mutex);
   while (size > 0)
     {
       /* Bytes left in inode, bytes left in sector, lesser of the two. */
@@ -428,7 +427,6 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
       bytes_written += chunk_size;
     }
 
-  lock_release (&inode->mutex);
   return bytes_written;
 }
 
