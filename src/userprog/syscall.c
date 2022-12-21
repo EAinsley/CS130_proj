@@ -3,6 +3,7 @@
 #include "devices/shutdown.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
+#include "filesys/inode.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
@@ -411,7 +412,8 @@ SYSCALL_FN (readdir) (int fd, char *name)
 static bool
 SYSCALL_FN (isdir) (int fd)
 {
-  return false;
+  struct file *f = fd_list_get_file (&thread_current ()->fd_list, fd);
+  return inode_isdir (file_get_inode (f));
 }
 static int
 SYSCALL_FN (inumber) (int fd)

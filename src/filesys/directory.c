@@ -258,7 +258,8 @@ dir_open_path (char *path)
       struct inode *inode = NULL;
       if (!dir_lookup (current_dir, token, &inode))
         goto fail;
-      // FIXME - Check if inode is a directory.
+      if (!inode_isdir (current_dir->inode))
+        goto fail;
       struct dir *next_dir = dir_open (inode);
       if (!next_dir)
         goto fail;
