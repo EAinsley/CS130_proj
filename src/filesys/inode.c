@@ -203,6 +203,7 @@ inode_create (block_sector_t inode_sector, off_t length)
             release_indirect (disk_inode.indirect_blocks[j], PTR_PER_SEC);
           return false;
         }
+      disk_inode.indirect_blocks[i] = ind_blk_sec;
       sectors -= data_blks;
     }
   buffer_cache_write (inode_sector, (void *)&disk_inode, 0, BLOCK_SECTOR_SIZE);
@@ -358,8 +359,6 @@ off_t
 inode_write_at (struct inode *inode, const void *buffer_, off_t size,
                 off_t offset)
 {
-  DEBUG_PRINT ("[inode write] %d, off=%d,size=%d\n", inode->sector, offset,
-               size);
   const uint8_t *buffer = buffer_;
   off_t bytes_written = 0;
 
