@@ -1,8 +1,9 @@
 #ifndef FILESYS_FILESYS_H
 #define FILESYS_FILESYS_H
 
-#include "filesys/off_t.h"
 #include <stdbool.h>
+
+#include "filesys/off_t.h"
 
 /* Sectors of system file inodes. */
 #define FREE_MAP_SECTOR 0 /* Free map file inode sector. */

@@ -1,4 +1,5 @@
 #include "filesys/filesys.h"
+#include "buffer_cache.h"
 #include "filesys/directory.h"
 #include "filesys/file.h"
 #include "filesys/free-map.h"
@@ -40,6 +41,7 @@ filesys_init (bool format)
 void
 filesys_done (void)
 {
+  buffer_cache_close ();
   free_map_close ();
 }
 
@@ -93,13 +95,13 @@ filesys_open (const char *name)
 bool
 filesys_remove (const char *name)
 {
-  lock_acquire(&fs_lock);
+  lock_acquire (&fs_lock);
 
   struct dir *dir = dir_open_root ();
   bool success = dir != NULL && dir_remove (dir, name);
   dir_close (dir);
 
-  lock_release(&fs_lock);
+  lock_release (&fs_lock);
   return success;
 }
 
