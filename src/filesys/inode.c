@@ -203,6 +203,7 @@ inode_create (block_sector_t inode_sector, off_t length)
             release_indirect (disk_inode.indirect_blocks[j], PTR_PER_SEC);
           return false;
         }
+      sectors -= data_blks;
     }
   buffer_cache_write (inode_sector, (void *)&disk_inode, 0, BLOCK_SECTOR_SIZE);
   return true;
@@ -289,6 +290,7 @@ inode_close (struct inode *inode)
               fs_sec_t data_blks
                   = sectors >= PTR_PER_SEC ? PTR_PER_SEC : sectors;
               release_indirect (inode->data.indirect_blocks[i], data_blks);
+              sectors -= data_blks;
             }
           // release the inode block sector
           release_sector (inode->sector);
@@ -356,6 +358,8 @@ off_t
 inode_write_at (struct inode *inode, const void *buffer_, off_t size,
                 off_t offset)
 {
+  DEBUG_PRINT ("[inode write] %d, off=%d,size=%d\n", inode->sector, offset,
+               size);
   const uint8_t *buffer = buffer_;
   off_t bytes_written = 0;
 
