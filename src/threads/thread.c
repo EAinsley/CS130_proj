@@ -300,7 +300,6 @@ thread_exit (void)
 
 #ifdef USERPROG
   process_exit ();
-  fd_list_clear (&thread_current ()->fd_list);
 #endif
 
   /* Remove thread from all threads list, set our status to dying,
@@ -480,10 +479,6 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *)t + PGSIZE;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
-
-#ifdef USERPROG
-  list_init (&t->fd_list);
-#endif
 
   // for process management
   t->pagedir = NULL;

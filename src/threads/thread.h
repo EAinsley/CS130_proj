@@ -1,6 +1,7 @@
 #ifndef THREADS_THREAD_H
 #define THREADS_THREAD_H
 
+#include "filesys/directory.h"
 #include "userprog/process.h"
 #include <debug.h>
 #include <list.h>
@@ -108,7 +109,8 @@ struct thread
 #endif
 
 #ifdef FILESYS
-  struct list fd_list; // list used to record file descriptors.
+  struct list fd_list;           // list used to record file descriptors.
+  struct dir *working_directory; // The working directory
 #endif
 
   /* Owned by thread.c. */

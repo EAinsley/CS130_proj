@@ -208,14 +208,19 @@ process_exit (void)
     }
   intr_set_level (old);
 
+#ifdef FILESYS
+  fd_list_clear (&thread_current ()->fd_list);
+  dir_close (thread_current ()->working_directory);
+#endif
+
   /* Destroy the current process's page directory and switch back to the
      kernel-only page directory.
 
-     Correct ordering here is crucial.  We must set cur->pagedir to NULL before
-     switching page directories, so that a timer interrupt can't switch back to
-     the process page directory.  We must activate the base page directory
-     before destroying the process's page directory, or our active page
-     directory will be one that's been freed (and cleared).
+     Correct ordering here is crucial.  We must set cur->pagedir to NULL
+     before switching page directories, so that a timer interrupt can't
+     switch back to the process page directory.  We must activate the base
+     page directory before destroying the process's page directory, or our
+     active page directory will be one that's been freed (and cleared).
      */
   uint32_t *pd = cur->pagedir;
   cur->pagedir = NULL;
@@ -697,6 +702,11 @@ proc_init (struct proc_record *proc)
   sema_init (&proc->sema_exit, 0);
   proc->proc_status = PROC_RUNNING;
   proc->image = NULL;
+
+#ifdef FILESYS
+  list_init (&thread_current ()->fd_list);
+  thread_current ()->working_directory = dir_open_root ();
+#endif
 }
 
 /* find the process whose thread id equals to the given id and return the
