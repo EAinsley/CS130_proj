@@ -5,6 +5,7 @@
 #include "filesys/free-map.h"
 #include "filesys/inode.h"
 #include "threads/synch.h"
+#include "threads/thread.h"
 #include <debug.h>
 #include <stdio.h>
 #include <string.h>
@@ -77,7 +78,9 @@ filesys_open (const char *name)
 {
   lock_acquire (&fs_lock);
 
-  struct dir *dir = dir_open_root ();
+  struct dir *dir = thread_current ()->working_directory;
+  if (!dir)
+    dir = dir_open_root ();
   struct inode *inode = NULL;
 
   if (dir != NULL)

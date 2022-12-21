@@ -301,6 +301,10 @@ thread_exit (void)
 #ifdef USERPROG
   process_exit ();
 #endif
+#ifdef FILESYS
+  if (thread_current ()->working_directory)
+    dir_close (thread_current ()->working_directory);
+#endif
 
   /* Remove thread from all threads list, set our status to dying,
      and schedule another process.  That process will destroy us
@@ -479,6 +483,9 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *)t + PGSIZE;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
+#ifdef FILESYS
+  t->working_directory = NULL;
+#endif
 
   // for process management
   t->pagedir = NULL;

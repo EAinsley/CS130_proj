@@ -125,6 +125,10 @@ start_process (void *ch_arg_)
   // notify the parent that the child process is ready
   sema_up (&ch_arg->sema_start);
 
+#ifdef FILESYS
+  thread_current ()->working_directory = ch_arg->parent->working_directory;
+#endif
+
   /* If load failed, quit. */
   if (!success)
     {
@@ -210,7 +214,6 @@ process_exit (void)
 
 #ifdef FILESYS
   fd_list_clear (&thread_current ()->fd_list);
-  dir_close (thread_current ()->working_directory);
 #endif
 
   /* Destroy the current process's page directory and switch back to the
@@ -705,7 +708,6 @@ proc_init (struct proc_record *proc)
 
 #ifdef FILESYS
   list_init (&thread_current ()->fd_list);
-  thread_current ()->working_directory = dir_open_root ();
 #endif
 }
 
