@@ -108,6 +108,11 @@ filesys_isdir (const char *name)
   free (filename);
   lock_release (&fs_lock);
 
+  // nothing behind the last /
+  // this is definitedly directory
+  if (strlen (filename) == 0)
+    return true;
+
   // find result
   if (inode)
     {
