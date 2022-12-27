@@ -86,6 +86,34 @@ filesys_create (const char *name, off_t initial_size, bool is_dir)
   return success;
 }
 
+/* Test if the path is a normal file or a directory
+ */
+bool
+filesys_isdir (const char *name)
+{
+  lock_acquire (&fs_lock);
+  // Seperate filename from path
+  char *path = (char *)malloc (strlen (name) + 1);
+  char *filename = (char *)malloc (strlen (name) + 1);
+  parse_path (name, path, filename);
+
+  // open the directory.
+  struct dir *dir = dir_open_path (path);
+  struct inode *inode = NULL;
+  if (dir != NULL)
+    dir_lookup (dir, filename, &inode);
+  dir_close (dir);
+
+  free (path);
+  free (filename);
+  lock_release (&fs_lock);
+
+  // find result
+  bool isdir = inode_isdir (inode);
+  inode_close (inode);
+  return isdir;
+}
+
 /* Opens the file with the given NAME.
    Returns the new file if successful or a null pointer
    otherwise.
