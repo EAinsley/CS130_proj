@@ -1,6 +1,7 @@
 #include "userprog/syscall.h"
 #include "devices/input.h"
 #include "devices/shutdown.h"
+#include "filesys/directory.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
 #include "filesys/inode.h"
@@ -51,7 +52,7 @@ get_user (const uint8_t *uaddr)
     return -1;
 
   int result;
-  asm("movl $1f, %0; movzbl %1, %0; 1:" : "=&a"(result) : "m"(*uaddr));
+  asm ("movl $1f, %0; movzbl %1, %0; 1:" : "=&a"(result) : "m"(*uaddr));
   return result;
 }
 
@@ -62,9 +63,9 @@ static bool
 put_user (uint8_t *udst, uint8_t byte)
 {
   int error_code;
-  asm("movl $1f, %0; movb %b2, %1; 1:"
-      : "=&a"(error_code), "=m"(*udst)
-      : "q"(byte));
+  asm ("movl $1f, %0; movb %b2, %1; 1:"
+       : "=&a"(error_code), "=m"(*udst)
+       : "q"(byte));
   return error_code != -1;
 }
 
@@ -258,21 +259,29 @@ SYSCALL_FN (remove) (const char *file)
 static int
 SYSCALL_FN (open) (const char *file)
 {
-  // TODO - open directory
   int fd = -1;
   // Check if pointer is NULL
   check_user_valid_string (file);
-  struct file *fp = filesys_open (file);
-  if (fp != NULL)
+  if (filesys_isdir (file))
+    // open dir
     {
-      fd = fd_list_insert (&thread_current ()->fd_list, fp);
+      struct dir *dp = dir_open_path (file);
+      if (dp != NULL)
+        fd = fd_list_insertd (&thread_current ()->fd_list, dp);
+    }
+  else
+    // open file
+    {
+      struct file *fp = filesys_open (file);
+      if (fp != NULL)
+        fd = fd_list_insertf (&thread_current ()->fd_list, fp);
     }
   return fd;
 }
 static int
 SYSCALL_FN (filesize) (int fd)
 {
-  struct file *f = fd_list_get_file (&thread_current ()->fd_list, fd);
+  struct file *f = fd_list_getf (&thread_current ()->fd_list, fd);
   if (f == NULL)
     err_exit ();
   int result = file_length (f);
@@ -386,7 +395,7 @@ check_user_valid_ptr (const void *ptr)
 struct file *
 get_current_open_file (int fd)
 {
-  struct file *fp = fd_list_get_file (&thread_current ()->fd_list, fd);
+  struct file *fp = fd_list_getf (&thread_current ()->fd_list, fd);
   if (fp == NULL)
     err_exit ();
   return fp;
@@ -410,18 +419,25 @@ SYSCALL_FN (mkdir) (const char *dir)
 static bool
 SYSCALL_FN (readdir) (int fd, char *name)
 {
-  // TODO - read dir
-  return false;
+  struct dir *dir = fd_list_getd (&thread_current ()->fd_list, fd);
+  if (!dir)
+    err_exit ();
+  return dir_read (dir, name);
 }
 static bool
 SYSCALL_FN (isdir) (int fd)
 {
-  struct file *f = fd_list_get_file (&thread_current ()->fd_list, fd);
-  return inode_isdir (file_get_inode (f));
+  return fd_list_getd (&thread_current ()->fd_list, fd) != NULL;
 }
 static int
 SYSCALL_FN (inumber) (int fd)
 {
-  // TODO - inumber
-  return false;
+  struct file *f = fd_list_getf (&thread_current ()->fd_list, fd);
+  struct dir *d = fd_list_getd (&thread_current ()->fd_list, fd);
+  if (f)
+    return inode_get_inumber (file_get_inode (f));
+  if (d)
+    return inode_get_inumber (dir_get_inode (d));
+  // fd not found
+  err_exit ();
 }

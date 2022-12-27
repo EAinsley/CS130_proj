@@ -138,6 +138,7 @@ filesys_open (const char *name)
   free (path);
   free (filename);
   lock_release (&fs_lock);
+  ASSERT (!inode_isdir (inode));
   return file_open (inode);
 }
 

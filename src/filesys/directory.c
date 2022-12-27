@@ -22,6 +22,21 @@ struct dir_entry
   bool in_use;                 /* In use or free? */
 };
 
+/* Read one member name in the directory */
+bool
+dir_read (struct dir *dir, char *name)
+{
+  struct dir_entry dirent;
+  size_t len = sizeof (dirent);
+  if (inode_read_at (dir->inode, &dirent, len, dir->pos) == len)
+    {
+      dir->pos += len;
+      strlcpy (name, dirent.name, strlen (dirent.name) + 1);
+      return true;
+    }
+  return false;
+}
+
 /* Creates a directory with space for ENTRY_CNT entries in the
    given SECTOR.  Returns true if successful, false on failure. */
 bool
@@ -253,8 +268,12 @@ dir_readdir (struct dir *dir, char name[NAME_MAX + 1])
 }
 
 struct dir *
-dir_open_path (char *path)
+dir_open_path (const char *path_)
 {
+  char *path = malloc (strlen (path_));
+  ASSERT (path != NULL);
+  strlcpy (path, path_, strlen (path_) + 1);
+
   struct dir *current_dir;
   if (path[0] == '/')
     {
@@ -282,9 +301,11 @@ dir_open_path (char *path)
       current_dir = next_dir;
     }
 
+  free (path);
   return current_dir;
 
 fail:
   dir_close (current_dir);
+  free (path);
   return NULL;
 }
