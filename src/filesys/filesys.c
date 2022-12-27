@@ -136,6 +136,19 @@ filesys_mkdir (const char *name)
   return filesys_create (name, 16, true);
 }
 
+bool
+filesys_chdir (const char *dirname)
+{
+  struct dir *dir = dir_open_path (dirname);
+  if (!dir)
+    return false;
+  struct thread *t = thread_current ();
+  if (t->working_directory)
+    dir_close (t->working_directory);
+  t->working_directory = dir;
+  return true;
+}
+
 /* Formats the file system. */
 static void
 do_format (void)

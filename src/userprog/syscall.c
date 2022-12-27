@@ -396,7 +396,8 @@ Returns true if successful, false on failure. */
 static bool
 SYSCALL_FN (chdir) (const char *dir)
 {
-  return false;
+  bool result = filesys_chdir (dir);
+  return result;
 }
 static bool
 SYSCALL_FN (mkdir) (const char *dir)
