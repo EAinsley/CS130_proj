@@ -156,7 +156,7 @@ parse_path (const char *name, char *const path, char *const filename)
   char *dir_end = strrchr (path, '/');
   if (dir_end)
     {
-      dir_end = '\0';
+      *dir_end = '\0';
       strlcpy (filename, dir_end + 1, name_len + 1);
     }
   else
