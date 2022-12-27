@@ -109,9 +109,13 @@ filesys_isdir (const char *name)
   lock_release (&fs_lock);
 
   // find result
-  bool isdir = inode_isdir (inode);
-  inode_close (inode);
-  return isdir;
+  if (inode)
+    {
+      bool isdir = inode_isdir (inode);
+      inode_close (inode);
+      return isdir;
+    }
+  return false;
 }
 
 /* Opens the file with the given NAME.
