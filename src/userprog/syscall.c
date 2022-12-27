@@ -252,11 +252,13 @@ SYSCALL_FN (remove) (const char *file)
 {
   check_user_valid_string (file);
   bool result = filesys_remove (file);
+  // TODO - remove directory.
   return result;
 }
 static int
 SYSCALL_FN (open) (const char *file)
 {
+  // TODO - open directory
   int fd = -1;
   // Check if pointer is NULL
   check_user_valid_string (file);
@@ -408,6 +410,7 @@ SYSCALL_FN (mkdir) (const char *dir)
 static bool
 SYSCALL_FN (readdir) (int fd, char *name)
 {
+  // TODO - read dir
   return false;
 }
 static bool
@@ -419,5 +422,6 @@ SYSCALL_FN (isdir) (int fd)
 static int
 SYSCALL_FN (inumber) (int fd)
 {
+  // TODO - inumber
   return false;
 }
