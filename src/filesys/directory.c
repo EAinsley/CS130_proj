@@ -270,7 +270,7 @@ dir_readdir (struct dir *dir, char name[NAME_MAX + 1])
 struct dir *
 dir_open_path (const char *path_)
 {
-  char *path = malloc (strlen (path_));
+  char *path = malloc (strlen (path_) + 1);
   ASSERT (path != NULL);
   strlcpy (path, path_, strlen (path_) + 1);
 
