@@ -144,7 +144,7 @@ start_process (void *ch_arg_)
      arguments on the stack in the form of a `struct intr_frame',
      we just point the stack pointer (%esp) to our stack frame
      and jump to it. */
-  asm volatile("movl %0, %%esp; jmp intr_exit" : : "g"(&if_) : "memory");
+  asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g"(&if_) : "memory");
   NOT_REACHED ();
 }
 
@@ -794,15 +794,18 @@ fd_list_clear (struct list *fl)
     {
       struct list_elem *e = list_pop_front (fl);
       struct fd_node *fd_node = list_entry (e, struct fd_node, fd_elem);
-      file_close (fd_node->f);
+      if (fd_node->f)
+        file_close (fd_node->f);
+      if (fd_node->d)
+        dir_close (fd_node->d);
       free (fd_node);
     }
   intr_set_level (old_level);
 }
 
-/* insert a new file, allocating fd */
+/* insert a new file, allocate fd */
 int
-fd_list_insert (struct list *fl, struct file *f)
+fd_list_insertf (struct list *fl, struct file *f)
 {
   ASSERT (f != NULL);
   // Create fd_node to store file
@@ -810,6 +813,7 @@ fd_list_insert (struct list *fl, struct file *f)
       = (struct fd_node *)malloc (sizeof (struct fd_node));
   new_fd_entry->fd = 2;
   new_fd_entry->f = f;
+  new_fd_entry->d = NULL;
   // Search for the first unallocated fd number.
   struct list_elem *e = list_begin (fl);
   for (; e != list_end (fl)
@@ -820,24 +824,58 @@ fd_list_insert (struct list *fl, struct file *f)
   return new_fd_entry->fd;
 }
 
-/* Get the fd_node associated with the fd.
+/* insert a new dir, allocate fd */
+int
+fd_list_insertd (struct list *fl, struct dir *d)
+{
+  ASSERT (d != NULL);
+  // Create fd_node to store the directory
+  struct fd_node *new_fd_entry
+      = (struct fd_node *)malloc (sizeof (struct fd_node));
+  new_fd_entry->fd = 2;
+  new_fd_entry->f = NULL;
+  new_fd_entry->d = d;
+  // Search for the first unallocated fd number.
+  struct list_elem *e = list_begin (fl);
+  for (; e != list_end (fl)
+         && new_fd_entry->fd == list_entry (e, struct fd_node, fd_elem)->fd;
+       e = list_next (e), new_fd_entry->fd++)
+    ;
+  list_insert (e, &new_fd_entry->fd_elem);
+  return new_fd_entry->fd;
+}
+
+/* Get the file structure associated with the fd.
   reutrn NULL if the given fd doesn't exist.
 */
 struct file *
-fd_list_get_file (struct list *fl, int fd)
+fd_list_getf (struct list *fl, int fd)
 {
   if (fd < 2)
-    {
-      return NULL;
-    }
+    return NULL;
   for (struct list_elem *e = list_begin (fl); e != list_end (fl);
        e = list_next (e))
     {
       struct fd_node *node = list_entry (e, struct fd_node, fd_elem);
       if (fd == node->fd)
-        {
-          return node->f;
-        }
+        return node->f;
+    }
+  return NULL;
+}
+/* Get the dir structure associated with the fd.
+  reutrn NULL if the given fd doesn't exist.
+*/
+struct dir *
+fd_list_getd (struct list *fl, int fd)
+{
+  if (fd < 2)
+    return NULL;
+  for (struct list_elem *e = list_begin (fl); e != list_end (fl);
+       e = list_next (e))
+    {
+      struct fd_node *node = list_entry (e, struct fd_node, fd_elem);
+      if (fd == node->fd)
+        return node->d;
     }
   return NULL;
 }
@@ -848,9 +886,7 @@ fd_list_remove (struct list *fl, int fd)
 {
   // invalid fd, cannot cloes stdin/stdout
   if (fd < 2)
-    {
-      return;
-    }
+    return;
 
   for (struct list_elem *e = list_begin (fl); e != list_end (fl);
        e = list_next (e))
@@ -858,7 +894,10 @@ fd_list_remove (struct list *fl, int fd)
       struct fd_node *node = list_entry (e, struct fd_node, fd_elem);
       if (fd == node->fd)
         {
-          file_close (node->f);
+          if (node->f)
+            file_close (node->f);
+          if (node->d)
+            dir_close (node->d);
           list_remove (e);
           free (node);
           return;
