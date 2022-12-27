@@ -181,7 +181,7 @@ release_indirect (fs_sec_t ind_sec, fs_sec_t data_blks)
    Returns true if successful.
    Returns false if memory or disk allocation fails. */
 bool
-inode_create (block_sector_t inode_sector, off_t length)
+inode_create (block_sector_t inode_sector, off_t length, bool is_dir)
 {
   ASSERT (length >= 0);
 
@@ -210,6 +210,7 @@ inode_create (block_sector_t inode_sector, off_t length)
       disk_inode.indirect_blocks[i] = ind_blk_sec;
       sectors -= data_blks;
     }
+  disk_inode.isdir = is_dir;
   buffer_cache_write (inode_sector, (void *)&disk_inode, 0, BLOCK_SECTOR_SIZE);
   return true;
 }

@@ -244,7 +244,7 @@ static bool
 SYSCALL_FN (create) (const char *file, unsigned initial_size)
 {
   check_user_valid_string (file);
-  bool result = filesys_create (file, initial_size);
+  bool result = filesys_create (file, initial_size, false);
   return result;
 }
 static bool
@@ -396,12 +396,12 @@ Returns true if successful, false on failure. */
 static bool
 SYSCALL_FN (chdir) (const char *dir)
 {
-
   return false;
 }
 static bool
 SYSCALL_FN (mkdir) (const char *dir)
 {
+  bool result = filesys_mkdir (dir);
   return false;
 }
 static bool
