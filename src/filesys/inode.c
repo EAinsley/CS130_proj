@@ -45,10 +45,10 @@ struct indirect_block
 struct inode_disk
 {
   fs_sec_t indirect_blocks[INDIRECT_COUNT];
-  off_t length;   /* File size in bytes. */
-  bool isdir;     /* True if the inode file is a directory. */
-  fs_sec_t dir;   /* The directory inode number in which this file resides */
-  unsigned magic; /* Magic number. */
+  off_t length;    /* File size in bytes. */
+  bool isdir;      /* True if the inode file is a directory. */
+  fs_sec_t pardir; /* The directory inode number in which this file resides */
+  unsigned magic;  /* Magic number. */
   char pad[PAD_LEN]; /* make sure the disk inode is big enough */
 };
 
@@ -189,10 +189,12 @@ release_indirect (fs_sec_t ind_sec, fs_sec_t data_blks)
 /* Initializes an inode with LENGTH bytes of data and
    writes the new inode to sector SECTOR on the file system
    device.
+   Parameter isdir indicate whether this creates a file or a directory.
+
    Returns true if successful.
    Returns false if memory or disk allocation fails. */
 bool
-inode_create (block_sector_t inode_sector, off_t length)
+inode_create (block_sector_t inode_sector, off_t length, bool isdir)
 {
   ASSERT (length >= 0);
 
@@ -202,6 +204,7 @@ inode_create (block_sector_t inode_sector, off_t length)
     disk_inode.indirect_blocks[i] = ERR_SECTOR;
   disk_inode.length = length;
   disk_inode.magic = INODE_MAGIC;
+  disk_inode.isdir = isdir;
 
   // number of required sectors, required indirect blocks
   fs_sec_t sectors = (fs_sec_t)bytes_to_sectors (length);
@@ -473,16 +476,24 @@ inode_length (const struct inode *inode)
   return inode->data.length;
 }
 
-/* Get the directory inode number in which this inode resides */
+/* Get the directory inode number in which this file is stored */
 block_sector_t
 inode_getdir (const struct inode *inode)
 {
-  return inode->data.dir;
+  return inode->data.pardir;
 }
+/* Put this file under the directory whose inode number is dir_inode */
 void
 inode_setdir (struct inode *inode, block_sector_t dir_inode)
 {
-  inode->data.dir = dir_inode;
+  inode->data.pardir = dir_inode;
+  wb_inode (&inode->data, inode->sector);
+}
+/* Check if this inode is a normal file or directory */
+bool
+inode_isdir (struct inode *inode)
+{
+  return inode->data.isdir;
 }
 
 // write back to disk helper functions
