@@ -35,6 +35,10 @@ dir_create (block_sector_t sector, size_t entry_cnt)
 struct dir *
 dir_open (struct inode *inode)
 {
+  // reject openining normal file as directory
+  if (!inode_isdir (inode))
+    return NULL;
+
   struct dir *dir = calloc (1, sizeof *dir);
   if (inode != NULL && dir != NULL)
     {
@@ -270,8 +274,6 @@ dir_open_path (char *path)
     {
       struct inode *inode = NULL;
       if (!dir_lookup (current_dir, token, &inode))
-        goto fail;
-      if (!inode_isdir (current_dir->inode))
         goto fail;
       struct dir *next_dir = dir_open (inode);
       if (!next_dir)
