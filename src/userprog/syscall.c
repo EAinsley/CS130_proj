@@ -402,7 +402,7 @@ static bool
 SYSCALL_FN (mkdir) (const char *dir)
 {
   bool result = filesys_mkdir (dir);
-  return false;
+  return result;
 }
 static bool
 SYSCALL_FN (readdir) (int fd, char *name)
