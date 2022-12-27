@@ -278,6 +278,7 @@ inode_reopen (struct inode *inode)
 block_sector_t
 inode_get_inumber (const struct inode *inode)
 {
+  ASSERT (inode != NULL);
   return inode->sector;
 }
 
@@ -454,6 +455,7 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 void
 inode_deny_write (struct inode *inode)
 {
+  ASSERT (inode != NULL);
   inode->deny_write_cnt++;
   ASSERT (inode->deny_write_cnt <= inode->open_cnt);
 }
@@ -464,6 +466,7 @@ inode_deny_write (struct inode *inode)
 void
 inode_allow_write (struct inode *inode)
 {
+  ASSERT (inode != NULL);
   ASSERT (inode->deny_write_cnt > 0);
   ASSERT (inode->deny_write_cnt <= inode->open_cnt);
   inode->deny_write_cnt--;
@@ -473,6 +476,7 @@ inode_allow_write (struct inode *inode)
 off_t
 inode_length (const struct inode *inode)
 {
+  ASSERT (inode != NULL);
   return inode->data.length;
 }
 
@@ -480,12 +484,14 @@ inode_length (const struct inode *inode)
 block_sector_t
 inode_getdir (const struct inode *inode)
 {
+  ASSERT (inode != NULL);
   return inode->data.pardir;
 }
 /* Put this file under the directory whose inode number is dir_inode */
 void
 inode_setdir (struct inode *inode, block_sector_t dir_inode)
 {
+  ASSERT (inode != NULL);
   inode->data.pardir = dir_inode;
   wb_inode (&inode->data, inode->sector);
 }
@@ -493,6 +499,7 @@ inode_setdir (struct inode *inode, block_sector_t dir_inode)
 bool
 inode_isdir (const struct inode *inode)
 {
+  ASSERT (inode != NULL);
   return inode->data.isdir;
 }
 
