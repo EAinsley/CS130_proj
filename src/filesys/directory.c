@@ -124,10 +124,13 @@ dir_lookup (const struct dir *dir, const char *name, struct inode **inode)
   ASSERT (dir != NULL);
   ASSERT (name != NULL);
 
+  // open parent directory
   if (!strcmp (name, ".."))
     {
-      // FIXME - Return the parend dir inode
+      *inode = inode_open (inode_getdir (dir->inode));
+      return true;
     }
+  // open current directory
   if (!strcmp (name, "."))
     {
       *inode = dir->inode;
