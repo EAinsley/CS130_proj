@@ -27,7 +27,7 @@ bool
 dir_read (struct dir *dir, char *name)
 {
   struct dir_entry dirent;
-  size_t len = sizeof (dirent);
+  off_t len = sizeof (dirent);
   if (inode_read_at (dir->inode, &dirent, len, dir->pos) == len)
     {
       dir->pos += len;

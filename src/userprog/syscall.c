@@ -27,8 +27,8 @@ static int SYSCALL_FN (write) (int fd, const void *buffer, unsigned size);
 static void SYSCALL_FN (seek) (int fd, unsigned position);
 static unsigned SYSCALL_FN (tell) (int fd);
 static void SYSCALL_FN (close) (int fd);
-static mapid_t SYSCALL_FN (mmap) (int fd, void *addr);
-static void SYSCALL_FN (munmap) (mapid_t mapid);
+// static mapid_t SYSCALL_FN (mmap) (int fd, void *addr);
+// static void SYSCALL_FN (munmap) (mapid_t mapid);
 /* directory syscall */
 static bool SYSCALL_FN (chdir) (const char *dir);
 static bool SYSCALL_FN (mkdir) (const char *dir);
@@ -352,22 +352,6 @@ SYSCALL_FN (close) (int fd)
   fd_list_remove (&thread_current ()->fd_list, fd);
 }
 
-static mapid_t
-SYSCALL_FN (mmap) (int fd UNUSED, void *addr UNUSED)
-{
-  // mmap not available in proj4
-  DEBUG_PRINT ("NO mmap in project 4");
-  err_exit ();
-  return -1;
-}
-static void
-SYSCALL_FN (munmap) (mapid_t mapid UNUSED)
-{
-  // mmap not available in proj4
-  DEBUG_PRINT ("NO mmap in project 4");
-  err_exit ();
-}
-
 /* Check whether the string is valid in user space */
 static void
 check_user_valid_string (const char *str)
@@ -438,6 +422,8 @@ SYSCALL_FN (inumber) (int fd)
     return inode_get_inumber (file_get_inode (f));
   if (d)
     return inode_get_inumber (dir_get_inode (d));
+
   // fd not found
   err_exit ();
+  return -1;
 }
