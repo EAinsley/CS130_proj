@@ -245,6 +245,7 @@ static bool
 SYSCALL_FN (create) (const char *file, unsigned initial_size)
 {
   check_user_valid_string (file);
+  // TODO - reject file name end with /
   bool result = filesys_create (file, initial_size, false);
   return result;
 }
@@ -262,6 +263,10 @@ SYSCALL_FN (open) (const char *file)
   int fd = -1;
   // Check if pointer is NULL
   check_user_valid_string (file);
+  // reject empty path
+  if (strlen (file) == 0)
+    return -1;
+
   if (filesys_isdir (file))
     // open dir
     {
