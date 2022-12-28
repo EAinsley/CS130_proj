@@ -267,6 +267,9 @@ dir_readdir (struct dir *dir, char name[NAME_MAX + 1])
   return false;
 }
 
+/* Open the given path_. Returns NULL if the path_ cannot be open or doesn't
+ * exist.*/
+
 struct dir *
 dir_open_path (const char *path_)
 {
