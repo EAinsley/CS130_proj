@@ -40,9 +40,10 @@ dir_read (struct dir *dir, char *name)
 /* Creates a directory with space for ENTRY_CNT entries in the
    given SECTOR.  Returns true if successful, false on failure. */
 bool
-dir_create (block_sector_t sector, size_t entry_cnt)
+dir_create (block_sector_t sector, size_t entry_cnt, block_sector_t pardir)
 {
-  return inode_create (sector, entry_cnt * sizeof (struct dir_entry), true);
+  return inode_create (sector, entry_cnt * sizeof (struct dir_entry), true,
+                       pardir);
 }
 
 /* Opens and returns the directory for the given INODE, of which
@@ -146,7 +147,7 @@ dir_lookup (const struct dir *dir, const char *name, struct inode **inode)
   // open parent directory
   if (!strcmp (name, ".."))
     {
-      *inode = inode_open (inode_getdir (dir->inode));
+      *inode = inode_open (inode_getpardir (dir->inode));
       return true;
     }
   // open current directory
