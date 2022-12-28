@@ -245,7 +245,12 @@ static bool
 SYSCALL_FN (create) (const char *file, unsigned initial_size)
 {
   check_user_valid_string (file);
-  // TODO - reject file name end with /
+  
+  // create empty name or create directory
+  size_t len = strlen (file);
+  if (len == 0 || file[len - 1] == '/')
+    return false;
+
   bool result = filesys_create (file, initial_size, false);
   return result;
 }
