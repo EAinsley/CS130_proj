@@ -48,11 +48,6 @@ static bool do_write (int fd, const char *buffer, int size, bool *write_error);
 static bool
 make_tar_archive (const char *archive_name, char *files[], size_t file_cnt)
 {
-  printf ("Make tar (%s) for: [\n", archive_name);
-  for (size_t i = 0; i < file_cnt; i++)
-    printf ("\t%s,\n", files[i]);
-  printf ("]\n");
-
   static const char zeros[512];
   int archive_fd;
   bool success = true;
@@ -76,7 +71,6 @@ make_tar_archive (const char *archive_name, char *files[], size_t file_cnt)
       char file_name[128];
 
       strlcpy (file_name, files[i], sizeof file_name);
-      printf ("adding [%s], file size=%d\n", file_name, filesize (archive_fd));
       if (!archive_file (file_name, sizeof file_name, archive_fd,
                          &write_error))
         success = false;
@@ -86,7 +80,6 @@ make_tar_archive (const char *archive_name, char *files[], size_t file_cnt)
       || !do_write (archive_fd, zeros, 512, &write_error))
     success = false;
 
-  printf ("finish tar size=%d\n", filesize (archive_fd));
   close (archive_fd);
 
   return success;
@@ -96,11 +89,6 @@ static bool
 archive_file (char file_name[], size_t file_name_size, int archive_fd,
               bool *write_error)
 {
-  printf ("archive file on [");
-  for (size_t i = 0; i < file_name_size; i++)
-    putchar (file_name[i]);
-  printf ("]\n");
-
   int file_fd = open (file_name);
   if (file_fd >= 0)
     {
@@ -136,7 +124,6 @@ static bool
 archive_ordinary_file (const char *file_name, int file_fd, int archive_fd,
                        bool *write_error)
 {
-  printf ("add ordinary file %s\n", file_name);
   bool read_error = false;
   bool success = true;
   int file_size = filesize (file_fd);
@@ -173,11 +160,6 @@ static bool
 archive_directory (char file_name[], size_t file_name_size, int file_fd,
                    int archive_fd, bool *write_error)
 {
-  printf ("add directory :");
-  for (size_t i = 0; i < file_name_size; i++)
-    putchar (file_name[i]);
-  printf ("\n");
-
   size_t dir_len;
   bool success = true;
 
@@ -192,10 +174,9 @@ archive_directory (char file_name[], size_t file_name_size, int file_fd,
     return false;
 
   file_name[dir_len] = '/';
-  while (readdir (file_fd, &file_name[dir_len + 1])){
+  while (readdir (file_fd, &file_name[dir_len + 1]))
     if (!archive_file (file_name, file_name_size, archive_fd, write_error))
       success = false;
-  }
   file_name[dir_len] = '\0';
 
   return success;

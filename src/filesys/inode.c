@@ -409,7 +409,7 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
               // cannot extend file, no free space
               if (data_sec == ERR_SECTOR)
                 {
-                  DEBUG_PRINT ("[FS] cannot extend file, disk is full");
+                  DEBUG_PRINT ("[FS] cannot extend file, disk is full\n");
                   lock_release (&inode->mutex);
                   return -1;
                 }
