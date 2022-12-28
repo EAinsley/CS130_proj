@@ -158,7 +158,7 @@ dir_lookup (const struct dir *dir, const char *name, struct inode **inode)
   // open current directory
   if (!strcmp (name, "."))
     {
-      *inode = dir->inode;
+      *inode = inode_reopen (dir->inode);
       return true;
     }
 
@@ -243,7 +243,7 @@ dir_remove (struct dir *dir, const char *name)
   if (inode_isdir (inode))
     {
       struct dir *dir = dir_open (inode);
-      if (!dir_isempty (dir))
+      if (!dir_isempty (dir) || inode_opencnt (inode) > 1)
         {
           dir_close (dir);
           goto done;
@@ -261,7 +261,6 @@ dir_remove (struct dir *dir, const char *name)
   success = true;
 
 done:
-  inode_close (inode);
   return success;
 }
 

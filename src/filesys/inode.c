@@ -117,7 +117,7 @@ inode_init (void)
 }
 
 /* Get the open counter */
-void
+int
 inode_opencnt (const struct inode *inode)
 {
   return inode->open_cnt;
@@ -254,6 +254,9 @@ inode_open (block_sector_t sector)
       if (inode->sector == sector)
         {
           inode_reopen (inode);
+          DEBUG_PRINT ("sector %d open_cnt: %d\n", inode->sector,
+                       inode->open_cnt);
+
           return inode;
         }
     }
@@ -271,6 +274,8 @@ inode_open (block_sector_t sector)
   inode->deny_write_cnt = 0;
   inode->removed = false;
   load_inode (&inode->data, inode->sector);
+  DEBUG_PRINT ("sector %d open_cnt: %d\n", inode->sector, inode->open_cnt);
+
   return inode;
 }
 
@@ -300,6 +305,7 @@ inode_close (struct inode *inode)
   /* Ignore null pointer. */
   if (inode == NULL)
     return;
+  DEBUG_PRINT ("sector %d open_cnt: %d\n", inode->sector, inode->open_cnt - 1);
 
   /* Release resources if this was the last opener. */
   if (--inode->open_cnt == 0)
