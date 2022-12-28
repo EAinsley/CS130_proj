@@ -20,8 +20,10 @@ void inode_deny_write (struct inode *);
 void inode_allow_write (struct inode *);
 off_t inode_length (const struct inode *);
 bool inode_isdir (const struct inode *);
+void inode_opencnt (const struct inode *inode);
 
 /* directory tree support */
+
 block_sector_t inode_getpardir (const struct inode *);
 
 #endif /* filesys/inode.h */

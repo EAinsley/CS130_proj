@@ -116,6 +116,13 @@ inode_init (void)
   ASSERT (sizeof (struct inode_disk) >= BLOCK_SECTOR_SIZE);
 }
 
+/* Get the open counter */
+void
+inode_opencnt (const struct inode *inode)
+{
+  return inode->open_cnt;
+}
+
 /* Get a free sector and zero it, return the sector index.
    Return ERR_SECTOR on error
 */
