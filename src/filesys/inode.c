@@ -406,10 +406,12 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
           if (ind_data.data_sectors[ind_idx] == ERR_SECTOR)
             {
               fs_sec_t data_sec = allocate_sector ();
+              // cannot extend file, no free space
               if (data_sec == ERR_SECTOR)
                 {
                   DEBUG_PRINT ("[FS] cannot extend file, disk is full");
-                  return 0;
+                  lock_release (&inode->mutex);
+                  return -1;
                 }
               // FIXME - what to do if we cannot further extend the file
               ind_data.data_sectors[ind_idx] = data_sec;
