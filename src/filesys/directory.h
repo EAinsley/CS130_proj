@@ -18,7 +18,7 @@ struct dir;
 bool dir_read (struct dir *dir, char *name);
 
 /* Opening and closing directories. */
-bool dir_create (block_sector_t sector, size_t entry_cnt);
+bool dir_create (block_sector_t sector, size_t entry_cnt, block_sector_t pardir);
 struct dir *dir_open (struct inode *);
 struct dir *dir_open_root (void);
 struct dir *dir_reopen (struct dir *);

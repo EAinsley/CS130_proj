@@ -194,7 +194,8 @@ release_indirect (fs_sec_t ind_sec, fs_sec_t data_blks)
    Returns true if successful.
    Returns false if memory or disk allocation fails. */
 bool
-inode_create (block_sector_t inode_sector, off_t length, bool isdir)
+inode_create (block_sector_t inode_sector, off_t length, bool isdir,
+              block_sector_t pardir_inode)
 {
   ASSERT (length >= 0);
 
@@ -205,6 +206,7 @@ inode_create (block_sector_t inode_sector, off_t length, bool isdir)
   disk_inode.length = length;
   disk_inode.magic = INODE_MAGIC;
   disk_inode.isdir = isdir;
+  disk_inode.pardir = pardir_inode;
 
   // number of required sectors, required indirect blocks
   fs_sec_t sectors = (fs_sec_t)bytes_to_sectors (length);
@@ -482,18 +484,10 @@ inode_length (const struct inode *inode)
 
 /* Get the directory inode number in which this file is stored */
 block_sector_t
-inode_getdir (const struct inode *inode)
+inode_getpardir (const struct inode *inode)
 {
   ASSERT (inode != NULL);
   return inode->data.pardir;
-}
-/* Put this file under the directory whose inode number is dir_inode */
-void
-inode_setdir (struct inode *inode, block_sector_t dir_inode)
-{
-  ASSERT (inode != NULL);
-  inode->data.pardir = dir_inode;
-  wb_inode (&inode->data, inode->sector);
 }
 /* Check if this inode is a normal file or directory */
 bool
