@@ -91,34 +91,11 @@ filesys_create (const char *name, off_t initial_size, bool is_dir)
 bool
 filesys_isdir (const char *name)
 {
-  lock_acquire (&fs_lock);
-  // Seperate filename from path
-  char *path = (char *)malloc (strlen (name) + 1);
-  char *filename = (char *)malloc (strlen (name) + 1);
-  parse_path (name, path, filename);
-
-  // open the directory.
-  struct dir *dir = dir_open_path (path);
-  struct inode *inode = NULL;
-  if (dir != NULL)
-    dir_lookup (dir, filename, &inode);
-  dir_close (dir);
-
-  free (path);
-  free (filename);
-  lock_release (&fs_lock);
-
-  // nothing behind the last /
-  // this is definitedly directory
-  if (strlen (filename) == 0)
-    return true;
-
-  // find result
-  if (inode)
+  struct dir *dir = dir_open_path (name);
+  if (dir)
     {
-      bool isdir = inode_isdir (inode);
-      inode_close (inode);
-      return isdir;
+      dir_close (dir);
+      return true;
     }
   return false;
 }
