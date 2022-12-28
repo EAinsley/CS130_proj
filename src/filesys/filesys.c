@@ -138,10 +138,18 @@ filesys_remove (const char *name)
 {
   lock_acquire (&fs_lock);
 
-  struct dir *dir = dir_open_root ();
-  bool success = dir != NULL && dir_remove (dir, name);
+  // Seperate filename from path
+  char *path = (char *)malloc (sizeof (char) * (strlen (name) + 1));
+  char *filename = (char *)malloc (sizeof (char) * strlen (name) + 1);
+  parse_path (name, path, filename);
+
+  struct dir *dir = dir_open_path (path);
+
+  bool success = dir != NULL && dir_remove (dir, filename);
   dir_close (dir);
 
+  free (path);
+  free (filename);
   lock_release (&fs_lock);
   return success;
 }

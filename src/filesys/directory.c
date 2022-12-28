@@ -7,6 +7,8 @@
 #include <stdio.h>
 #include <string.h>
 
+static bool dir_isempty (struct dir *);
+
 /* A directory. */
 struct dir
 {
@@ -237,6 +239,18 @@ dir_remove (struct dir *dir, const char *name)
   if (inode == NULL)
     goto done;
 
+  /* If is directory*/
+  if (inode_isdir (inode))
+    {
+      struct dir *dir = dir_open (inode);
+      if (!dir_isempty (dir))
+        {
+          dir_close (dir);
+          goto done;
+        }
+      dir_close (dir);
+    }
+
   /* Erase directory entry. */
   e.in_use = false;
   if (inode_write_at (dir->inode, &e, sizeof e, ofs) != sizeof e)
@@ -315,4 +329,19 @@ fail:
   dir_close (current_dir);
   free (path);
   return NULL;
+}
+
+static bool
+dir_isempty (struct dir *dir)
+{
+  struct dir_entry e;
+  size_t ofs;
+
+  ASSERT (dir != NULL);
+
+  for (ofs = 0; inode_read_at (dir->inode, &e, sizeof e, ofs) == sizeof e;
+       ofs += sizeof e)
+    if (e.in_use)
+      return false;
+  return true;
 }
