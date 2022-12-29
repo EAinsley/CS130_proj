@@ -77,9 +77,9 @@ filesys_create (const char *name, off_t initial_size, bool is_dir)
                   && inode_create (inode_sector, initial_size, is_dir,
                                    inode_get_inumber (dir_get_inode (dir)))
                   && dir_add (dir, newname, inode_sector));
-  lock_release (&fs_lock);
   if (!success && inode_sector != 0)
     free_map_release (inode_sector, 1);
+  lock_release (&fs_lock);
 
   dir_close (dir);
   free (path);
@@ -144,8 +144,8 @@ filesys_remove (const char *name)
   lock_acquire (&fs_lock);
   struct dir *dir = dir_open_path (path);
   bool success = dir != NULL && dir_remove (dir, filename);
-  lock_release (&fs_lock);
   dir_close (dir);
+  lock_release (&fs_lock);
 
   free (path);
   free (filename);
