@@ -6,6 +6,25 @@
     global or static variable, \lstinline{typedef}, or enumeration.
     Identify the purpose of each in 25 words or less.
   \end{qc}
+  In \texttt{buffer\_cache.h}, we define every cache entry to be
+  \begin{lstlisting}
+struct buffer_cache_node
+{
+  block_sector_t sector;             // the sector index
+  uint8_t buffer[BLOCK_SECTOR_SIZE]; // the buffer used to store the data
+  bool dirty;                        // dirty bit
+  bool access;                       // access bit for the clock eviction
+  bool in_use;                       // if this cache node is in use.
+};
+  \end{lstlisting}
+  Also, in \texttt{buffer\_cache.c}
+  \begin{lstlisting}
+static struct buffer_cache_node cache[BUFFER_CACHE_SIZE]; // the cache
+static struct lock buffer_cache_lock; // the lock for the cache
+static size_t clock_pointer; // used for clock algorithm
+static size_t cache_size; // the number of nodes in the cache.
+static bool is_closing;   // closing signal
+\end{lstlisting}
 \end{aspect}
 
 
@@ -14,12 +33,54 @@
     C2: Describe how your cache replacement algorithm chooses a cache
     block to evict.
   \end{qc}
+  We use clock algorithm which is an approximation of LRU. We use a global \lstinline{clock_pointer} to point to the last block that has been evicted. When we want to evict a bool, we first find the next block by incresing the \lstinline{clock_pointer}. If the block have been accessed recently, we set the access bit false, and test the next block. If the block hasn't been accessed recently, then we evict the block. The \lstinline{access} in the \lstinline{struct buffer_cache_node} is used for the access bit.
   \begin{qc}
     C3: Describe your implementation of write-behind.
   \end{qc}
+  We initialze a thread when we initialize the cache. This thread periodically write back all blocks in the cache, and clear their dirty bits.\\
+  In \lstinline{buffer_cache_init()}:
+  \begin{lstlisting}
+  thread_create ("write-behind", PRI_DEFAULT, write_behind, NULL);
+  \end{lstlisting}
+  And the \lstinline{write_behind} is defined as
+  \begin{lstlisting}
+static void
+write_behind (void)
+{
+  while (!is_closing)
+    {
+      lock_acquire (&buffer_cache_lock);
+      for (int i = 0; i < BUFFER_CACHE_SIZE; i++)
+        {
+          if (cache[i].in_use && cache[i].dirty)
+            {
+              block_write (fs_device, cache[i].sector, cache[i].buffer);
+              // clear the dirty state
+              cache[i].dirty = false;
+            }
+        }
+      lock_release (&buffer_cache_lock);
+      // sleep for two seconds
+      timer_sleep (2 * TIMER_FREQ);
+    }
+}
+  \end{lstlisting}
   \begin{qc}
     C4: Describe your implementation of read-ahead.
   \end{qc}
+  In \texttt{buffer\_cache}, we provide a special function
+  \begin{lstlisting}
+void buffer_cache_prefetch (block_sector_t sector);
+  \end{lstlisting}
+  It will read the sector into the cache and set \lstinline{access} bit true to prevent been evicted instantly.\\
+  When we call \lstinline{inode_read_at(struct inode *inode, void *buffer_, off_t size, off_t offset)} in \texttt{inode.c}, it will prefetch the next data sector in the file each time we read the data blocks.
+  \begin{lstlisting}
+buffer_cache_read (sector_idx, buffer + bytes_read, sector_ofs,
+    chunk_size);
+// fetch the next data blocks in this file
+if (inode->data.length > offset + 512)
+  buffer_cache_prefetch (byte_to_sector (inode, offset + 512));
+  \end{lstlisting}
 \end{aspect}
 
 \begin{aspect}{SYNCHRONIZATION}
@@ -28,10 +89,12 @@
     buffer cache block, how are other processes prevented from evicting
     that block?
   \end{qc}
+  Each time the process access the block, it will set the \lstinline{access} bit true. When doing eviction, it will not evict those blocks whose \lstinline{access} bit is true unless the \lstinline{access} bits of all the blocks in the cache are true. That is, frequetly accessed blocks are guranteened to be evicted later than those less frequently accessed blocks. Therefore, if one process is actively accessing the data in a buffer cache block, other process cannot evict them.
   \begin{qc}
     C6: During the eviction of a block from the cache, how are other
     processes prevented from attempting to access the block?
   \end{qc}
+  We give the cache a lock. Both evicting and accessing the data blocks will need to acquire the lock. During the eviction of a block, other processes must wait until the eviction finished before they access the block.
 \end{aspect}
 
 \begin{aspect}{RATIONALE}
@@ -39,4 +102,7 @@
     C7: Describe a file workload likely to benefit from buffer caching,
     and workloads likely to benefit from read-ahead and write-behind.
   \end{qc}
+  \textbf{Buffer caching:} When we frequently read or write only several blocks of the file, buffer caching can help use speed up.\\
+  \textbf{Read-ahead:} When we sequentially read a file, read-ahead will save the time that we wait for the next data block.\\
+  \textbf{Write-behind:} If we only write the block once. Another scenario may be we want to write a large amount of data on a machine that the write operation fails sometimes. Write-behind saved our writes periodically, so we may restart from the middle of our work instead of retring all the write operations.
 \end{aspect}
