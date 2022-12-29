@@ -58,7 +58,6 @@ filesys_done (void)
 bool
 filesys_create (const char *name, off_t initial_size, bool is_dir)
 {
-  lock_acquire (&fs_lock);
   // Seperate filename from path
   char *path = (char *)malloc (sizeof (char) * (strlen (name) + 1));
   char *dirname = (char *)malloc (sizeof (char) * strlen (name) + 1);
@@ -67,23 +66,23 @@ filesys_create (const char *name, off_t initial_size, bool is_dir)
     {
       free (path);
       free (dirname);
-      lock_release (&fs_lock);
       return false;
     }
 
+  lock_acquire (&fs_lock);
   block_sector_t inode_sector = 0;
   struct dir *dir = dir_open_path (path);
   bool success = (dir != NULL && free_map_allocate (1, &inode_sector)
                   && inode_create (inode_sector, initial_size, is_dir,
                                    inode_get_inumber (dir_get_inode (dir)))
                   && dir_add (dir, dirname, inode_sector));
+  lock_release (&fs_lock);
   if (!success && inode_sector != 0)
     free_map_release (inode_sector, 1);
 
   dir_close (dir);
   free (path);
   free (dirname);
-  lock_release (&fs_lock);
   return success;
 }
 
@@ -109,14 +108,15 @@ filesys_isdir (const char *name)
 struct file *
 filesys_open (const char *name)
 {
-  lock_acquire (&fs_lock);
   // Seperate filename from path
   char *path = (char *)malloc (sizeof (char) * (strlen (name) + 1));
   char *filename = (char *)malloc (sizeof (char) * strlen (name) + 1);
   parse_path (name, path, filename);
 
   // open the directory.
+  lock_acquire (&fs_lock);
   struct dir *dir = dir_open_path (path);
+  lock_release (&fs_lock);
   struct inode *inode = NULL;
   if (dir != NULL)
     dir_lookup (dir, filename, &inode);
@@ -124,7 +124,6 @@ filesys_open (const char *name)
 
   free (path);
   free (filename);
-  lock_release (&fs_lock);
   ASSERT (inode == NULL || !inode_isdir (inode));
   return file_open (inode);
 }
@@ -136,21 +135,19 @@ filesys_open (const char *name)
 bool
 filesys_remove (const char *name)
 {
-  lock_acquire (&fs_lock);
-
   // Seperate filename from path
   char *path = (char *)malloc (sizeof (char) * (strlen (name) + 1));
   char *filename = (char *)malloc (sizeof (char) * strlen (name) + 1);
   parse_path (name, path, filename);
 
+  lock_acquire (&fs_lock);
   struct dir *dir = dir_open_path (path);
-
   bool success = dir != NULL && dir_remove (dir, filename);
+  lock_release (&fs_lock);
   dir_close (dir);
 
   free (path);
   free (filename);
-  lock_release (&fs_lock);
   return success;
 }
 
