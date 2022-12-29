@@ -370,6 +370,9 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
       block_sector_t sector_idx = byte_to_sector (inode, offset);
       buffer_cache_read (sector_idx, buffer + bytes_read, sector_ofs,
                          chunk_size);
+      // fetch the next data blocks in this file
+      if (inode->data.length > offset + 512)
+        buffer_cache_prefetch (byte_to_sector (inode, offset + 512));
 
       /* Advance. */
       size -= chunk_size;
