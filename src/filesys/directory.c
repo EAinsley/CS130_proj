@@ -2,9 +2,12 @@
 #include "filesys/filesys.h"
 #include "filesys/inode.h"
 #include "threads/malloc.h"
+#include "threads/thread.h"
 #include <list.h>
 #include <stdio.h>
 #include <string.h>
+
+static bool dir_isempty (struct dir *);
 
 /* A directory. */
 struct dir
@@ -21,12 +24,31 @@ struct dir_entry
   bool in_use;                 /* In use or free? */
 };
 
+/* Read one member name in the directory */
+bool
+dir_read (struct dir *dir, char *name)
+{
+  struct dir_entry dirent;
+  off_t len = sizeof (dirent);
+  while (inode_read_at (dir->inode, &dirent, len, dir->pos) == len)
+    {
+      dir->pos += len;
+      if (dirent.in_use)
+        {
+          strlcpy (name, dirent.name, strlen (dirent.name) + 1);
+          return true;
+        }
+    }
+  return false;
+}
+
 /* Creates a directory with space for ENTRY_CNT entries in the
    given SECTOR.  Returns true if successful, false on failure. */
 bool
-dir_create (block_sector_t sector, size_t entry_cnt)
+dir_create (block_sector_t sector, size_t entry_cnt, block_sector_t pardir)
 {
-  return inode_create (sector, entry_cnt * sizeof (struct dir_entry));
+  return inode_create (sector, entry_cnt * sizeof (struct dir_entry), true,
+                       pardir);
 }
 
 /* Opens and returns the directory for the given INODE, of which
@@ -34,6 +56,10 @@ dir_create (block_sector_t sector, size_t entry_cnt)
 struct dir *
 dir_open (struct inode *inode)
 {
+  // reject openining normal file as directory
+  if (!inode_isdir (inode))
+    return NULL;
+
   struct dir *dir = calloc (1, sizeof *dir);
   if (inode != NULL && dir != NULL)
     {
@@ -123,6 +149,19 @@ dir_lookup (const struct dir *dir, const char *name, struct inode **inode)
   ASSERT (dir != NULL);
   ASSERT (name != NULL);
 
+  // open parent directory
+  if (!strcmp (name, ".."))
+    {
+      *inode = inode_open (inode_getpardir (dir->inode));
+      return true;
+    }
+  // open current directory
+  if (!strcmp (name, "."))
+    {
+      *inode = inode_reopen (dir->inode);
+      return true;
+    }
+
   if (lookup (dir, name, &e, NULL))
     *inode = inode_open (e.inode_sector);
   else
@@ -200,6 +239,15 @@ dir_remove (struct dir *dir, const char *name)
   if (inode == NULL)
     goto done;
 
+  /* If is directory*/
+  if (inode_isdir (inode))
+    {
+      struct dir *dir = dir_open (inode_reopen (inode));
+      if (!dir_isempty (dir) || inode_opencnt (inode) > 2)
+        goto done;
+      dir_close (dir);
+    }
+
   /* Erase directory entry. */
   e.in_use = false;
   if (inode_write_at (dir->inode, &e, sizeof e, ofs) != sizeof e)
@@ -232,4 +280,65 @@ dir_readdir (struct dir *dir, char name[NAME_MAX + 1])
         }
     }
   return false;
+}
+
+/* Open the given path_. Returns NULL if the path_ cannot be open or doesn't
+ * exist.*/
+
+struct dir *
+dir_open_path (const char *path_)
+{
+  char *path = malloc (strlen (path_) + 1);
+  ASSERT (path != NULL);
+  strlcpy (path, path_, strlen (path_) + 1);
+
+  struct dir *current_dir;
+  if (path[0] == '/')
+    {
+      // abosolute path
+      current_dir = dir_open_root ();
+    }
+  else
+    {
+      // relative path
+      struct thread *t = thread_current ();
+      current_dir = t->working_directory ? dir_reopen (t->working_directory)
+                                         : dir_open_root ();
+    }
+  char *saveptr, *token;
+  for (token = strtok_r (path, "/", &saveptr); token != NULL;
+       token = strtok_r (NULL, "/", &saveptr))
+    {
+      struct inode *inode = NULL;
+      if (!dir_lookup (current_dir, token, &inode))
+        goto fail;
+      struct dir *next_dir = dir_open (inode);
+      if (!next_dir)
+        goto fail;
+      dir_close (current_dir);
+      current_dir = next_dir;
+    }
+
+  free (path);
+  return current_dir;
+
+fail:
+  dir_close (current_dir);
+  free (path);
+  return NULL;
+}
+
+static bool
+dir_isempty (struct dir *dir)
+{
+  struct dir_entry e;
+  size_t ofs;
+
+  ASSERT (dir != NULL);
+
+  for (ofs = 0; inode_read_at (dir->inode, &e, sizeof e, ofs) == sizeof e;
+       ofs += sizeof e)
+    if (e.in_use)
+      return false;
+  return true;
 }

@@ -17,8 +17,11 @@ void buffer_cache_init (void);
 /* Read a block into the cache. */
 void buffer_cache_read (block_sector_t sector, void *dest, off_t offset,
                         off_t length);
-void buffer_cache_write (block_sector_t sector, void *src, off_t offset,
+void buffer_cache_write (block_sector_t sector, const void *src, off_t offset,
                          off_t length);
 void buffer_cache_close (void);
+
+// TODO - Periodically writeback
+// TODO - Prefetch sector
 
 #endif // BUFFER_CACHE_H

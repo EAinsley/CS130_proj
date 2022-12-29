@@ -27,8 +27,7 @@ struct proc_record
   struct semaphore sema_exit;            // up on exit, indicates proc exiting
   bool orphan;                           // whether the parent process exists
   struct proc_record *children[MAX_CHS]; // children process records
-  struct list fd_list; // list used to record file descriptors.
-  struct file *image;  // the image of self.
+  struct file *image;                    // the image of self.
 };
 
 /* find the process whose thread id equals to the given id and return the
@@ -50,15 +49,20 @@ struct fd_node
 {
   int fd;         // file descriptor
   struct file *f; // file
+  struct dir *d;  // directory
   struct list_elem fd_elem;
 };
 
 /* clear the fd_list*/
 void fd_list_clear (struct list *fdlist);
-/* Insert new files and get proper fd*/
-int fd_list_insert (struct list *fl, struct file *f);
-/* Get the file with specified fd*/
-struct file *fd_list_get_file (struct list *ls, int fd);
+/* Insert new file and get proper fd */
+int fd_list_insertf (struct list *fl, struct file *f);
+/* Insert new directory and get proper fd */
+int fd_list_insertd (struct list *fl, struct dir *d);
+/* Get the file with specified fd */
+struct file *fd_list_getf (struct list *ls, int fd);
+/* Get the directory with specified fd */
+struct dir *fd_list_getd (struct list *ls, int fd);
 /* close and remove the fd, return the file */
 void fd_list_remove (struct list *ls, int fd);
 

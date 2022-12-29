@@ -1,8 +1,10 @@
 #include "userprog/syscall.h"
 #include "devices/input.h"
 #include "devices/shutdown.h"
+#include "filesys/directory.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
+#include "filesys/inode.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
@@ -25,8 +27,14 @@ static int SYSCALL_FN (write) (int fd, const void *buffer, unsigned size);
 static void SYSCALL_FN (seek) (int fd, unsigned position);
 static unsigned SYSCALL_FN (tell) (int fd);
 static void SYSCALL_FN (close) (int fd);
-static mapid_t SYSCALL_FN (mmap) (int fd, void *addr);
-static void SYSCALL_FN (munmap) (mapid_t mapid);
+// static mapid_t SYSCALL_FN (mmap) (int fd, void *addr);
+// static void SYSCALL_FN (munmap) (mapid_t mapid);
+/* directory syscall */
+static bool SYSCALL_FN (chdir) (const char *dir);
+static bool SYSCALL_FN (mkdir) (const char *dir);
+static bool SYSCALL_FN (readdir) (int fd, char *name);
+static bool SYSCALL_FN (isdir) (int fd);
+static int SYSCALL_FN (inumber) (int fd);
 
 static void check_user_valid_string (const char *);
 static void check_user_valid_ptr (const void *);
@@ -180,9 +188,18 @@ syscall_handler (struct intr_frame *f)
   FWD_CASE (SYS_SEEK, FWD2 (seek, int, unsigned));
   FWD_CASE (SYS_TELL, FWD1_RET (tell, int));
   FWD_CASE (SYS_CLOSE, FWD1 (close, int));
-  /* Only in Project 3 */
+/* Only in Project 3 */
+#ifdef VM
   FWD_CASE (SYS_MMAP, FWD2_RET (mmap, int, void *));
   FWD_CASE (SYS_MUNMAP, FWD1 (munmap, mapid_t));
+#endif
+#ifdef FILESYS
+  FWD_CASE (SYS_CHDIR, FWD1_RET (chdir, const char *));
+  FWD_CASE (SYS_MKDIR, FWD1_RET (mkdir, const char *));
+  FWD_CASE (SYS_READDIR, FWD2_RET (readdir, int, char *));
+  FWD_CASE (SYS_ISDIR, FWD1_RET (isdir, int));
+  FWD_CASE (SYS_INUMBER, FWD1_RET (inumber, int));
+#endif
 
   // invalid system call
   err_exit ();
@@ -228,7 +245,13 @@ static bool
 SYSCALL_FN (create) (const char *file, unsigned initial_size)
 {
   check_user_valid_string (file);
-  bool result = filesys_create (file, initial_size);
+  
+  // create empty name or create directory
+  size_t len = strlen (file);
+  if (len == 0 || file[len - 1] == '/')
+    return false;
+
+  bool result = filesys_create (file, initial_size, false);
   return result;
 }
 static bool
@@ -244,17 +267,30 @@ SYSCALL_FN (open) (const char *file)
   int fd = -1;
   // Check if pointer is NULL
   check_user_valid_string (file);
-  struct file *fp = filesys_open (file);
-  if (fp != NULL)
+  // reject empty path
+  if (strlen (file) == 0)
+    return -1;
+
+  if (filesys_isdir (file))
+    // open dir
     {
-      fd = fd_list_insert (&proc_current ()->fd_list, fp);
+      struct dir *dp = dir_open_path (file);
+      if (dp != NULL)
+        fd = fd_list_insertd (&thread_current ()->fd_list, dp);
+    }
+  else
+    // open file
+    {
+      struct file *fp = filesys_open (file);
+      if (fp != NULL)
+        fd = fd_list_insertf (&thread_current ()->fd_list, fp);
     }
   return fd;
 }
 static int
 SYSCALL_FN (filesize) (int fd)
 {
-  struct file *f = fd_list_get_file (&proc_current ()->fd_list, fd);
+  struct file *f = fd_list_getf (&thread_current ()->fd_list, fd);
   if (f == NULL)
     err_exit ();
   int result = file_length (f);
@@ -322,22 +358,7 @@ SYSCALL_FN (tell) (int fd)
 static void
 SYSCALL_FN (close) (int fd)
 {
-  fd_list_remove (&proc_current ()->fd_list, fd);
-}
-
-static mapid_t
-SYSCALL_FN (mmap) (int fd UNUSED, void *addr UNUSED)
-{
-  // mmap not available in proj4
-  DEBUG_PRINT("NO mmap in project 4");
-  err_exit();
-}
-static void
-SYSCALL_FN (munmap) (mapid_t mapid UNUSED)
-{
-  // mmap not available in proj4
-  DEBUG_PRINT("NO mmap in project 4");
-  err_exit();
+  fd_list_remove (&thread_current ()->fd_list, fd);
 }
 
 /* Check whether the string is valid in user space */
@@ -367,8 +388,51 @@ check_user_valid_ptr (const void *ptr)
 struct file *
 get_current_open_file (int fd)
 {
-  struct file *fp = fd_list_get_file (&proc_current ()->fd_list, fd);
+  struct file *fp = fd_list_getf (&thread_current ()->fd_list, fd);
   if (fp == NULL)
     err_exit ();
   return fp;
+}
+
+/* Changes the current working directory of the process to dir, which may be
+relative or absolute.
+Returns true if successful, false on failure. */
+static bool
+SYSCALL_FN (chdir) (const char *dir)
+{
+  bool result = filesys_chdir (dir);
+  return result;
+}
+static bool
+SYSCALL_FN (mkdir) (const char *dir)
+{
+  bool result = filesys_mkdir (dir);
+  return result;
+}
+static bool
+SYSCALL_FN (readdir) (int fd, char *name)
+{
+  struct dir *dir = fd_list_getd (&thread_current ()->fd_list, fd);
+  if (!dir)
+    err_exit ();
+  return dir_read (dir, name);
+}
+static bool
+SYSCALL_FN (isdir) (int fd)
+{
+  return fd_list_getd (&thread_current ()->fd_list, fd) != NULL;
+}
+static int
+SYSCALL_FN (inumber) (int fd)
+{
+  struct file *f = fd_list_getf (&thread_current ()->fd_list, fd);
+  struct dir *d = fd_list_getd (&thread_current ()->fd_list, fd);
+  if (f)
+    return inode_get_inumber (file_get_inode (f));
+  if (d)
+    return inode_get_inumber (dir_get_inode (d));
+
+  // fd not found
+  err_exit ();
+  return -1;
 }

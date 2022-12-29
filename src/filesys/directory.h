@@ -1,9 +1,10 @@
 #ifndef FILESYS_DIRECTORY_H
 #define FILESYS_DIRECTORY_H
 
-#include "devices/block.h"
 #include <stdbool.h>
 #include <stddef.h>
+
+#include "devices/block.h"
 
 /* Maximum length of a file name component.
    This is the traditional UNIX maximum length.
@@ -12,12 +13,17 @@
 #define NAME_MAX 14
 
 struct inode;
+struct dir;
+
+bool dir_read (struct dir *dir, char *name);
 
 /* Opening and closing directories. */
-bool dir_create (block_sector_t sector, size_t entry_cnt);
+bool dir_create (block_sector_t sector, size_t entry_cnt,
+                 block_sector_t pardir);
 struct dir *dir_open (struct inode *);
 struct dir *dir_open_root (void);
 struct dir *dir_reopen (struct dir *);
+struct dir *dir_open_path (const char *path);
 void dir_close (struct dir *);
 struct inode *dir_get_inode (struct dir *);
 
