@@ -60,12 +60,12 @@ filesys_create (const char *name, off_t initial_size, bool is_dir)
 {
   // Seperate filename from path
   char *path = (char *)malloc (sizeof (char) * (strlen (name) + 1));
-  char *dirname = (char *)malloc (sizeof (char) * strlen (name) + 1);
-  parse_path (name, path, dirname);
-  if (strlen (dirname) == 0)
+  char *newname = (char *)malloc (sizeof (char) * strlen (name) + 1);
+  parse_path (name, path, newname);
+  if (strlen (newname) == 0 || !strcmp (newname, ".") || !strcmp(newname, ".."))
     {
       free (path);
-      free (dirname);
+      free (newname);
       return false;
     }
 
@@ -75,14 +75,14 @@ filesys_create (const char *name, off_t initial_size, bool is_dir)
   bool success = (dir != NULL && free_map_allocate (1, &inode_sector)
                   && inode_create (inode_sector, initial_size, is_dir,
                                    inode_get_inumber (dir_get_inode (dir)))
-                  && dir_add (dir, dirname, inode_sector));
+                  && dir_add (dir, newname, inode_sector));
   lock_release (&fs_lock);
   if (!success && inode_sector != 0)
     free_map_release (inode_sector, 1);
 
   dir_close (dir);
   free (path);
-  free (dirname);
+  free (newname);
   return success;
 }
 
