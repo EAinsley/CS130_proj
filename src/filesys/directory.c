@@ -244,11 +244,7 @@ dir_remove (struct dir *dir, const char *name)
     {
       struct dir *dir = dir_open (inode);
       if (!dir_isempty (dir) || inode_opencnt (inode) > 1)
-        {
-          dir_close (dir);
-          goto done;
-        }
-      dir_close (dir);
+        goto done;
     }
 
   /* Erase directory entry. */
@@ -261,6 +257,7 @@ dir_remove (struct dir *dir, const char *name)
   success = true;
 
 done:
+  dir_close (dir);
   return success;
 }
 
