@@ -6,13 +6,29 @@
 		global or static variable, \lstinline{typedef}, or enumeration.
 		Identify the purpose of each in 25 words or less.
 	\end{qc}
+	In \lstinline{threads/thread.h}, we added the following fields for TCB strcuture:
+	\begin{lstlisting}
+struct dir *working_directory; // The userprog current working directory (cwd), NULL->root
+	\end{lstlisting}
 \end{aspect}
 
 \begin{aspect}{ALGORITHMS}
 	\begin{qc}
-		B2: Describe your code for traversing a user-specified path.  How
-		do traversals of absolute and relative paths differ?
+		B2: Describe your code for traversing a user-specified path.
+		How do traversals of absolute and relative paths differ?
 	\end{qc}
+	This can be found in the \lstinline{struct dir* dir_open_path (const char *path)} function in \lstinline{filesys/directory.c}.
+	\begin{enumerate}
+		\item Reject invalid path: \lstinline{NULL}, with components longer than \lstinline{14} characters.
+		\item If the given path starts with an \lstinline{/}, then it is an absolute path.
+		      We start from the root directory.
+		      Otherwise, the path is relative, we start from the CWD of the userprog process.
+		\item Use \lstinline{strtok_r} to extract every path component.
+		\item Every time a new path component $x$ is found, we lookup in the current directory for the name $x$.
+		\item If the \lstinline{dir_entry} is an directory, then we recurse into $x$. Otherwise, we simply stop the process.
+		\item If we stop before all the path components are processed, then the path is invalid.
+		      Otherwise, return the file or directory inode found.
+	\end{enumerate}
 \end{aspect}
 
 \begin{aspect}{SYNCHRONIZATION}
@@ -22,12 +38,18 @@
 		should succeed, as should only one of two simultaneous attempts to
 		create a file with the same name, and so on.
 	\end{qc}
+	We have a file system level lock.
+	\textcolor{red}{TODO}.
+
 	\begin{qc}
 		B5: Does your implementation allow a directory to be removed if it
-		is open by a process or if it is in use as a process's current
-		working directory?  If so, what happens to that process's future
-		file system operations?  If not, how do you prevent it?
+		is open by a process or if it is in use as a process's current working directory?
+		If so, what happens to that process's future file system operations?
+		If not, how do you prevent it?
 	\end{qc}
+	No.
+	We first open the directory to be removed and check if the inode open count is 1 i.e., no other thread is accesssing the directory.
+	After that, we call \lstinline{inode\_remove} and \lstinline{inode\_close} to remove it from disk.
 \end{aspect}
 
 
@@ -36,4 +58,7 @@
 		B6: Explain why you chose to represent the current directory of a
 		process the way you did.
 	\end{qc}
+	We included a \lstinline{struct dir *cwd} field in PCB, instead of having a path string.\\
+	Not to use a string avoids tedious string concatenation and spliting process.
+	This also makes parent directory lookup much eaiser.
 \end{aspect}
