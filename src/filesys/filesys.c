@@ -62,7 +62,8 @@ filesys_create (const char *name, off_t initial_size, bool is_dir)
   char *path = (char *)malloc (sizeof (char) * (strlen (name) + 1));
   char *newname = (char *)malloc (sizeof (char) * strlen (name) + 1);
   parse_path (name, path, newname);
-  if (strlen (newname) == 0 || !strcmp (newname, ".") || !strcmp(newname, ".."))
+  if (strlen (newname) == 0 || !strcmp (newname, ".")
+      || !strcmp (newname, ".."))
     {
       free (path);
       free (newname);
@@ -154,7 +155,14 @@ filesys_remove (const char *name)
 bool
 filesys_mkdir (const char *name)
 {
-  return filesys_create (name, 16, true);
+  int len = strlen (name);
+  char *dirname = malloc (len + 1);
+  strlcpy (dirname, name, len + 1);
+  while (len > 0 && dirname[len - 1] == '/')
+    dirname[--len] = '\0';
+  bool result = filesys_create (dirname, 16, true);
+  free (dirname);
+  return result;
 }
 
 bool
