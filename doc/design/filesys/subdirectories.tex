@@ -38,8 +38,10 @@ struct dir *working_directory; // The userprog current working directory (cwd), 
 		should succeed, as should only one of two simultaneous attempts to
 		create a file with the same name, and so on.
 	\end{qc}
-	We have a file system level lock.
-	\textcolor{red}{TODO}.
+	We have a file system level lock (\lstinline{static struct lock fs\_lock;} In \lstinline{filesys/filesys.c}),
+	all the directory manipulation are synchronized.
+	If two threads attempt to remove/create a single file, one must wait for another to finish before.
+	Therefore, only one of them will succeed and the other is rejected.
 
 	\begin{qc}
 		B5: Does your implementation allow a directory to be removed if it
