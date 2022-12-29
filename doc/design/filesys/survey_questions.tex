@@ -9,26 +9,41 @@
 		was this assignment, or any one of the three problems in it, too easy or too hard?
 		Did it take too long or too little time?
 	\end{qc}
+	Easy to get the functionality implemented,
+	hard to write robust and performant code.
+	It is quite hard to write correct code with fine-grained locks.\\
 
 	\begin{qc}
 		Did you find that working on a particular part of the assignment
 		gave you greater insight into some aspect of OS design?
 	\end{qc}
+	The corner cases and race conditions in subdirectory creation/deletion synchronization
+	have told me a lesson:
+	mutex lock on hierarchical structure is a bad thing to have.
 
 	\begin{qc}
 		Is there some particular fact or hint we should give students in future quarters
 		to help them solve the problems?
 		Conversely, did you find any of our guidance to be misleading?
 	\end{qc}
+	\begin{itemize}
+		\item To get an inode removed from disk, we have to mark the \lstinline{removed} field before closing it.\\
+		\item Bulid up a resource ownership mindset.
+		      After calling \lstinline{dir\_open} and \lstinline{file\_open} on an inode object,
+		      you should never use the inode object again,
+			  otherwise inode-level use-after-free may happen.
+	\end{itemize}
 
 	\begin{qc}
 		Do you have any suggestions for the TAs to more effectively assist students,
 		either for future quarters or the remaining projects?
 	\end{qc}
+	Tell the students, not to use fine-grained synchronization.
+	They are still to young to grasph it.\\
+	Getting the functionalities correctly implemented is already a hugh workload.
+
 	\begin{qc}
 		Any other comments?
 	\end{qc}
+	PintOS is full of inperfections and trade-offs. It is not quite satisfying.
 \end{aspect}
-
-
-
