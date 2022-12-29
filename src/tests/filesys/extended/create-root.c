@@ -12,4 +12,6 @@ test_main (void)
   CHECK (!mkdir ("//../.."), "must false 1.4");
   CHECK (mkdir ("a"), "mkdir /a/ ok");
   CHECK (mkdir ("/../../a/b"), "mkdir /a/b/ ok");
+  CHECK(!mkdir("a/b/"), "make a/b/ must fail");
+  CHECK (mkdir ("a/c/"), "make a/c/ ok");
 }

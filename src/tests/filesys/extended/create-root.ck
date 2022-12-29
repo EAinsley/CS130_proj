@@ -10,6 +10,8 @@ check_expected ([<<'EOF']);
 (create-root) must false 1.4
 (create-root) mkdir /a/ ok
 (create-root) mkdir /a/b/ ok
+(create-root) make a/b/ must fail
+(create-root) make a/c/ ok
 (create-root) end
 create-root: exit(0)
 EOF

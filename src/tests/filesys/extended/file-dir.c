@@ -8,6 +8,6 @@ test_main (void)
 {
   CHECK (!create ("..", 0), "create .. must fail");
   CHECK (!create (".", 0), "create . must fail");
-  CHECK (!create ("a", 0), "create a ok");
+  CHECK (!create ("a/", 0), "create a/ fail");
   CHECK (!create ("b//", 0), "create b// fail");
 }
