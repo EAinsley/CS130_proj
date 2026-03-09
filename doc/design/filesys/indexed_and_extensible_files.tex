@@ -1,46 +1,111 @@
 \section*{INDEXED AND EXTENSIBLE FILES}
 
 \begin{aspect}{DATA STRUCTURES}
-  \begin{qc}
-    A1: Copy here the declaration of each new or changed \lstinline{struct} or member,
-    global or static variable, \lstinline{typedef}, or enumeration.
-    Identify the purpose of each in 25 words or less.
-  \end{qc}
-  \begin{qc}
-    A2: What is the maximum size of a file supported by your inode
-    structure?  Show your work.
-  \end{qc}
+	\begin{qc}
+		A1: Copy here the declaration of each new or changed \lstinline{struct} or member,
+		global or static variable, \lstinline{typedef}, or enumeration.
+		Identify the purpose of each in 25 words or less.
+	\end{qc}
+
+	In \lstinline{filesys/inode.c}: We use int-16 to represent a disk sector.
+	\begin{lstlisting}
+/* filesys partition sector index: 8MB = 2^14 SECTORS, use 16bit=2B */
+typedef uint16_t fs_sec_t;
+#define PTR_SIZE (sizeof (fs_sec_t))
+/* store up to 256 pointers in one indirect block */
+#define PTR_PER_SEC (BLOCK_SECTOR_SIZE / PTR_SIZE)
+
+#define FS_SIZE (8 * (1 << 20)) // maximum filesys partition size: 8MB
+#define ERR_SECTOR ((fs_sec_t)(-1))  // use -1 to represent failure
+#define INDIRECT_COUNT (FS_SECTORS / PTR_PER_SEC) // number of indirect pointers to index a 8MB file
+
+/* On-disk indirect block layout: indexing 256 data sectors */
+struct indirect_block { fs_sec_t data_sectors[PTR_PER_SEC]; };
+
+/* On-disk inode.  Must be exactly BLOCK_SECTOR_SIZE bytes long. */
+struct inode_disk
+{
+  fs_sec_t indirect_blocks[INDIRECT_COUNT]; /* indirect pointers */
+  off_t length;    /* File size in bytes. */
+  bool isdir;      /* True if the inode file is a directory. */
+  fs_sec_t pardir; /* The directory inode number in which this file resides */
+  unsigned magic;  /* Magic number. */
+  char pad[PAD_LEN]; /* make sure the disk inode 512 bytes */
+};
+
+/* In-memory inode. */
+struct inode
+{
+  struct list_elem elem;  /* Element in inode list. */
+  struct lock mutex;      /* for synchronization */
+  block_sector_t sector;  /* Sector number of disk location. */
+  int open_cnt;           /* Number of openers. */
+  bool removed;           /* True if deleted, false otherwise. */
+  int deny_write_cnt;     /* 0: writes ok, >0: deny writes. */
+  struct inode_disk data; /* Inode content. */
+};
+\end{lstlisting}
+
+	\begin{qc}
+		A2: What is the maximum size of a file supported by your inode
+		structure?  Show your work.
+	\end{qc}
+	Same as the maximum filesys partition size, 8MB.\\
+	Every inode has \lstinline{INDIRECT_COUNT=64} indirect-pointers.
+	Every indirect block can index \lstinline{512/2=256} data blocks.
+	This allow an inode to index $64\times 256\times 512=8\times 2^{20}B = 8MB$ of data.
 \end{aspect}
 
 \begin{aspect}{SYNCHRONIZATION}
-  \begin{qc}
-    A3: Explain how your code avoids a race if two processes attempt to
-    extend a file at the same time.
-  \end{qc}
-  \begin{qc}
-    A4: Suppose processes A and B both have file F open, both
-    positioned at end-of-file.  If A reads and B writes F at the same
-    time, A may read all, part, or none of what B writes.  However, A
-    may not read data other than what B writes, e.g. if B writes
-    nonzero data, A is not allowed to see all zeros.  Explain how your
-    code avoids this race.
-  \end{qc}
-  \begin{qc}
-    A5: Explain how your synchronization design provides "fairness".
-    File access is "fair" if readers cannot indefinitely block writers
-    or vice versa.  That is, many processes reading from a file cannot
-    prevent forever another process from writing the file, and many
-    processes writing to a file cannot prevent another process forever
-    from reading the file.
-  \end{qc}
+	\begin{qc}
+		A3: Explain how your code avoids a race if two processes attempt to
+		extend a file at the same time.
+	\end{qc}
+	We associate a mutex lock for every in-memory inode.
+	Before a thread attempt to extend an inode, it must first acquire the associated lock.\\
+	This prevent two threads simultaneously updating the inode indirect pointers and length fields.
+
+	\begin{qc}
+		A4: Suppose processes A and B both have file F open, both
+		positioned at end-of-file.  If A reads and B writes F at the same
+		time, A may read all, part, or none of what B writes.  However, A
+		may not read data other than what B writes, e.g. if B writes
+		nonzero data, A is not allowed to see all zeros.  Explain how your
+		code avoids this race.
+	\end{qc}
+	We uses the mutex lock in inode to protect the length field so all threads see the up-to-date file length.
+	Thus thread A will beable to read the data appended by B immediately after B extended the file.\\
+
+	We have a disk buffer cache in the filesys. All disk read/write pass through the cache.
+	The cache have internal synchronization mechanism ensuring that after write to a disk sector finishes,
+	all following reads see the updated data.\\
+	Every time B writes a chunk of data, it asks the buffer cache module to update the corresponding sector,
+	so that thread A can read the data right after B's write finishes.
+
+	\begin{qc}
+		A5: Explain how your synchronization design provides "fairness".
+		File access is "fair" if readers cannot indefinitely block writers
+		or vice versa.  That is, many processes reading from a file cannot
+		prevent forever another process from writing the file, and many
+		processes writing to a file cannot prevent another process forever
+		from reading the file.
+	\end{qc}
+	Our implementation do not guarantee strong-consistency i.e.,
+	we have no synchronization when reading/writing file.
+	A thread only acquires the inode lock if he wants to change the the indirect pointers or the file length.\\
+	Therefore, readers will not starve writers nor vice versa.
 \end{aspect}
 
 \begin{aspect}{RATIONALE}
-  \begin{qc}
-    A6: Is your inode structure a multilevel index?  If so, why did you
-    choose this particular combination of direct, indirect, and doubly
-    indirect blocks?  If not, why did you choose an alternative inode
-    structure, and what advantages and disadvantages does your
-    structure have, compared to a multilevel index?
-  \end{qc}
+	\begin{qc}
+		A6: Is your inode structure a multilevel index?  If so, why did you
+		choose this particular combination of direct, indirect, and doubly
+		indirect blocks?  If not, why did you choose an alternative inode
+		structure, and what advantages and disadvantages does your
+		structure have, compared to a multilevel index?
+	\end{qc}
+	Yes, we choose a fully-indirect design i.e., an inode contains 64 indirect pointers, each can indexes 256 data blocks.\\
+	We have no direct and doubly-indirect blocks, which greatly simplifies your implementation and allows a more perdictable performance.
+	However, due to lack of direct pointers, every access to data block have to go through at least one indirect pointer,
+	which may cause performance degrade when accessing small-files.
 \end{aspect}
